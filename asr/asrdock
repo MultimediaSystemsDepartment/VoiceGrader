@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# Commands on Docker container
+
+TAG=asr_workflow
+EXTPORT=8000
+MODE="$1"
+shift
+
+case $MODE in
+    start)
+        # Start the container
+        docker start "$@" ${TAG}
+        ;;
+    stop)
+        # Stop the container
+        docker stop "$@" ${TAG}
+        ;;
+    restart)
+        # Restart the container
+        docker restart "$@" ${TAG}
+        ;;
+    pause)
+        # Pause the container
+        docker pause "$@" ${TAG}
+        ;;
+    unpause)
+        # Unpause the container
+        docker unpause "$@" ${TAG}
+        ;;
+    run)
+        # Run the container in the foreground
+        docker run --gpus all -p ${EXTPORT}:8000 --shm-size=2gb --name ${TAG} "$@" ${TAG}
+        ;;
+    daemon)
+        # Run the container in the background as daemon
+        docker run -d --restart unless-stopped --gpus all -p ${EXTPORT}:8000 --shm-size=2gb --name ${TAG} "$@" ${TAG}
+        ;;
+    rm)
+        # Remove the container
+        docker rm "$@" ${TAG}
+        ;;
+    logs)
+        # Show logs
+        docker logs "$@" ${TAG}
+        ;;
+    bash)
+        # Open interactive bash session
+        docker exec -it "$@" ${TAG} /bin/bash
+        ;;
+    build)
+        # Build the container with cache
+        docker build -t ${TAG} "$@" .
+        ;;
+    build-nocache)
+        # Build the container without cache
+        docker build --no-cache -t ${TAG} "$@" .
+        ;;
+    kill)
+        # Kill the container
+        docker kill "$@" ${TAG}
+        ;;
+    stats)
+        # Display a live stream of container(s) resource usage statistics
+        docker stats "$@" ${TAG}
+        ;;
+    top)
+        # Display the running processes of a container
+        docker top "$@" ${TAG}
+        ;;
+    push)
+        # Push the image to GitLab repository
+        docker tag ${TAG}:latest containers.projects.task.gda.pl/caise/spaces/pl0161-01/${TAG}:latest && \
+        docker push containers.projects.task.gda.pl/caise/spaces/pl0161-01/${TAG}:latest && \
+        docker rmi containers.projects.task.gda.pl/caise/spaces/pl0161-01/${TAG}:latest
+        ;;
+    *)
+        echo "Invalid command ${MODE}."
+        exit 1
+        ;;
+esac

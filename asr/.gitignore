@@ -1,0 +1,15 @@
+__pycache__
+.venv
+*.bak
+*.*_
+*_.*
+~*.*
+ttt.*
+!/data/models/.gitkeep
+/data/models/*
+/asr_processor/data/models/*
+/data/testwav
+/asr_processor/nisqalib
+/asr_processor/models
+/asr_processor/checkpoints
+/whisper_live/WhisperLive

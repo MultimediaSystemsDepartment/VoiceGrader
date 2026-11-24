@@ -1,0 +1,17 @@
+{
+  "experiment_id": "convergence-v1",
+  "rounds": 5,
+  "annotations_per_round": 100,
+  "seeds": [42, 137, 911, 2027, 4099],
+  "tie_wer_threshold": 0.05,
+  "noisy_feedback_error_rate": 0.05,
+  "submit_gt_correction": true,
+  "missing_gt": "error",
+  "interaction_samples": 500,
+  "monitor_samples": 100,
+  "holdout_samples": 200,
+  "initial_policy": "base",
+  "gpu": "0",
+  "base_port": 8180,
+  "output_root": "_outputs/rlhf_loop_tests"
+}

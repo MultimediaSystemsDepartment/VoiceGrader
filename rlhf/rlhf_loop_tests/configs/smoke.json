@@ -1,0 +1,17 @@
+{
+  "experiment_id": "smoke",
+  "rounds": 1,
+  "annotations_per_round": 64,
+  "seeds": [42],
+  "tie_wer_threshold": 0.05,
+  "noisy_feedback_error_rate": 0.05,
+  "submit_gt_correction": true,
+  "missing_gt": "error",
+  "interaction_samples": 64,
+  "monitor_samples": 20,
+  "holdout_samples": 40,
+  "initial_policy": "base",
+  "gpu": "0",
+  "base_port": 8180,
+  "output_root": "_outputs/rlhf_loop_tests"
+}

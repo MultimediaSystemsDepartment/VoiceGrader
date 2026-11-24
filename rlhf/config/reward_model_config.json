@@ -1,0 +1,18 @@
+{
+  "whisper_model_id": "openai/whisper-medium",
+  "bert_model_id": "dkleczek/bert-base-polish-uncased-v1",
+  "mlp_hidden_dim": 512,
+  "mlp_dropout": 0.1,
+  "device": "cuda",
+  "torch_dtype": "float16",
+  "attn_implementation": "sdpa",
+  "learning_rate": 0.0001,
+  "batch_size": 16,
+  "num_epochs": 20,
+  "warmup_steps": 10,
+  "save_steps": 50,
+  "max_text_length": 128,
+  "reward_gap_threshold": 0.1,
+  "min_annotations_for_training": 50,
+  "reward_model_version": "v1"
+}

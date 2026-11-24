@@ -1,0 +1,12 @@
+# Web-only dependencies (no GPU, no torch CUDA)
+# torch and torchaudio (CPU-only) are installed separately in Dockerfile.web
+# to keep the image smaller than the GPU image.
+fastapi>=0.111
+uvicorn[standard]>=0.29
+jinja2>=3.1
+python-multipart>=0.0.9
+soundfile>=0.12
+numpy>=1.24
+resampy>=0.4
+jiwer>=3.0
+tqdm>=4.65

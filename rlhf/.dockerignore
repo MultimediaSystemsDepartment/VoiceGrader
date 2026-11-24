@@ -1,0 +1,43 @@
+# .dockerignore -- files excluded from the Docker build context.
+# This keeps the build fast by not sending large data files to the daemon.
+
+# Data archives (mounted as volumes at runtime)
+_data/
+
+# Outputs (mounted as volumes at runtime)
+_outputs/
+
+# Local state for the separately built GPU stress tester. Its own .dockerignore
+# applies only when building from gpu-stress-tester/, not from this repository root.
+gpu-stress-tester/data/
+gpu-stress-tester/model-cache/
+gpu-stress-tester/outputs/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Version control
+.git/
+.gitignore
+
+# Local virtual environments
+venv/
+.venv/
+env/
+
+# Editor / OS
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Docs and non-runtime files
+*.pdf
+*.md
+docs/
+_BKP/

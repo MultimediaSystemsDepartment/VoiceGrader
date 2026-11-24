@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Download nisqalib to asr_processor
+
+pushd asr_processor
+
+[ -d "./nisqalib" ] && { echo "Directory exists. Exiting."; popd; exit 0; }
+
+git clone https://github.com/kale4eat/nisqalib.git tmp
+cd tmp
+git submodule update --init --recursive
+cd ..
+mv tmp/src/nisqalib ./nisqalib
+rm -rf tmp
+
+popd

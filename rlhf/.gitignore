@@ -1,0 +1,8 @@
+__pycache__
+_outputs/
+_data/
+_data/archive.zip
+_BKP
+stress_tests/load/logs/
+/remote.env
+_stress_test_data/*

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAISE-ASR &mdash; Sesja adnotacji / Annotation Session</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/i18n.js"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-title">CAISE-ASR</div>
+    <div class="header-subtitle">
+      <span class="lang-pl">Interfejs dostrajania modelu ASR (RLHF)</span>
+      <span class="lang-en">ASR model fine-tuning interface (RLHF)</span>
+    </div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link lang-active">Wersja polska</a>
+      <span class="lang-sep">|</span>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle"></div>
+  <div class="header-logos">
+    <img src="/static/logo-caise.svg" alt="CAISE" class="logo-caise">
+    <img src="/static/logo-admedvoice.png" alt="ADMEDVOICE" class="logo-admedvoice">
+  </div>
+</header>
+
+  <main>
+    <div class="setup-card">
+      {% if error %}
+      <div class="error-msg">{{ error }}</div>
+      {% endif %}
+      <h1>CAISE-ASR</h1>
+      <p class="subtitle">
+        <span class="lang-pl">Wpisz swoje dane, aby rozpocząć sesję adnotacji.</span>
+        <span class="lang-en">Enter your details to start a new annotation session.</span>
+      </p>
+
+      <form method="post" action="/setup">
+        <label for="participant_id">
+          <span class="lang-pl">Identyfikator uczestnika</span>
+          <span class="lang-en">Participant ID</span>
+        </label>
+        <input type="text" id="participant_id" name="participant_id"
+               placeholder="np. jan / e.g. alice" autocomplete="username" required autofocus>
+
+        <button type="submit" class="btn-primary">
+          <span class="lang-pl">Rozpocznij adnotowanie</span>
+          <span class="lang-en">Start Annotating</span>
+        </button>
+      </form>
+      <p class="info-note"><a href="/admin/login"><span class="lang-pl">Panel administratora</span><span class="lang-en">Admin Login</span></a></p>
+    </div>
+  </main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <p class="footer-copy">
+      <span class="lang-pl">© 2026 Katedra Systemów Multimedialnych, Politechnika Gdańska, Wydział Elektroniki, Telekomunikacji i Informatyki.</span>
+      <span class="lang-en">© 2026 Department of Multimedia Systems, Gdańsk University of Technology, Faculty of Electronics, Telecommunication and Informatics.</span>
+    </p>
+    <p class="footer-disclaimer">
+      <span class="lang-pl">Autorzy usługi nie ponoszą odpowiedzialności za generowane przez nią treści, ani za konsekwencje dalszego ich wykorzystania.</span>
+      <span class="lang-en">The creators of the service bear no responsibility for the content it generates or for the consequences of its further use.</span>
+    </p>
+    <p class="footer-projects-title">
+      <span class="lang-pl">Usługa zrealizowana w ramach poniższych projektów.</span>
+      <span class="lang-en">Service created within the following projects.</span>
+    </p>
+    <p class="footer-project">
+      <a href="https://caise.pl/" target="_blank" rel="noopener">CAISE</a>
+      <span class="lang-pl"> (Cloud Artificial Intelligence Service Engineering) - Chmurowa Platforma do wytwarzania uniwersalnych usług inteligentnych dla różnych obszarów zastosowań. Instytucja wdrażająca: Narodowe Centrum Badań i Rozwoju (NCBR). Program finansujący: KPO IPCEI CIS C 3.1.1 Important Project of Common European Interest. Nr projektu: KPOD.05.10-IW.10-0005/24.</span>
+      <span class="lang-en"> (Cloud Artificial Intelligence Service Engineering) - Cloud platform for creating universal intelligent services for various application areas. Implementing Institution: National Centre for Research and Development (NCBR). Financing Program: KPO IPCEI CIS C 3.1.1 Important Project of Common European Interest. Project No.: KPOD.05.10-IW.10-0005/24.</span>
+    </p>
+    <p class="footer-project">
+      <a href="https://multimed.org/admedvoice" target="_blank" rel="noopener">ADMEDVOICE</a>
+      <span class="lang-pl"> - Adaptacyjny system inteligentnego przetwarzania mowy lekarzy wraz ze strukturalizacją wyników badań i wspomaganiem procesu terapeutycznego. Projekt współfinansowany przez Narodowe Centrum Badań i Rozwoju w ramach programu Infostrateg IV, nr projektu: INFOSTRATEG-IV/0003/2022.</span>
+      <span class="lang-en"> - Adaptive intelligent speech processing system of medical personnel with the structuring of test results and support of therapeutic process. The project was co-financed by the National Centre for Research and Development under the Infostrateg IV program, project number: INFOSTRATEG-IV/0003/2022.</span>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

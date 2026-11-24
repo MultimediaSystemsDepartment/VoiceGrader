@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: asr-deployment
+  labels:
+    app: asr-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: asr-app
+  template:
+    metadata:
+      labels:
+        app: asr-app
+    spec:
+      imagePullSecrets:
+        - name: pull-secret
+      containers:
+        - name: asr-workflow
+          image: containers.projects.task.gda.pl/caise/spaces/pl0161-01/asr_workflow:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "2"
+              memory: "16Gi"
+              nvidia.com/mig-2g.24gb: "1"
+            limits:
+              cpu: "4"
+              memory: "32Gi"
+              nvidia.com/mig-2g.24gb: "1"
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1100
+            runAsGroup: 1100
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: "RuntimeDefault"
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: asr-service
+spec:
+  type: ClusterIP
+  selector:
+    app: asr-app
+  ports:
+    - protocol: TCP
+      port: 80          # Port exposed to the cluster
+      targetPort: 8000  # Port Uvicorn is listening on inside the container
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: asr-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-cluster-issuer"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: asr.ingress.caise.k8s.apl.task.gda.pl
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: asr-service
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - asr.ingress.caise.k8s.apl.task.gda.pl
+    secretName: asr-tls-secret

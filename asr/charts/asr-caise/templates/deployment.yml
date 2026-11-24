@@ -1,0 +1,105 @@
+{{- range $name, $service := .Values.services }}
+---
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: "{{ $name }}-deploy"
+  labels:
+    app: "{{ $name }}-app"
+spec:
+  replicas: {{ $service.replication.replicas | default 1 }}
+  {{- if $service.strategy }}
+  strategy:
+    {{- toYaml $service.strategy | nindent 4 }}
+  {{- else }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  {{- end }}
+  selector:
+    matchLabels:
+      app: "{{ $name }}-app"
+  template:
+    metadata:
+      labels:
+        app: "{{ $name }}-app"
+    spec:
+      imagePullSecrets:
+        - name: "{{ $service.image.pullSecret }}"
+      containers:
+      - name: "{{ $name }}"
+        image: "{{ $service.image.name }}:{{ $service.image.tag }}"
+        imagePullPolicy: "{{ $service.image.pullPolicy }}"
+        ports:
+        - containerPort: {{ $service.publish.targetPort }}
+          name: "http"
+        resources:
+          requests:
+            cpu: {{ $service.resources.cpu }}
+            memory: {{ $service.resources.memory }}Gi
+        {{- if $service.resources.gpu_type }}
+            {{ $service.resources.gpu_type }}: "1"
+        {{- end }}
+          limits:
+            cpu: {{ mulf 2 $service.resources.cpu }}
+            memory: {{ mul 2 $service.resources.memory }}Gi
+        {{- if $service.resources.gpu_type }}
+            {{ $service.resources.gpu_type }}: "1"
+        {{- end }}
+        volumeMounts:
+        {{- if $service.resources.shmSize }}
+          - name: dshm
+            mountPath: /dev/shm
+        {{- end }}
+        {{- range $config := $service.configurationFiles }}
+          - mountPath: "{{ dir $config.path }}"
+            name: {{ $name }}-{{ regexReplaceAll "\\..*$" (base $config.path) "" }}
+        {{- end }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1100
+          runAsGroup: 1100
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        env:
+        - name: "MONITORING_USERNAME"
+          valueFrom:
+            secretKeyRef:
+              key: "api_username"
+              name: "monitoring-credentials"
+        - name: "MONITORING_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              key: "api_password"
+              name: "monitoring-credentials"
+        - name: "POD_NAME"
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        envFrom:
+        {{- range $secret := $service.environment.secrets }}
+          - secretRef:
+              name: "{{ $secret }}"
+        {{- end }}
+          - configMapRef:
+              name: "{{ $name }}-configuration"
+      volumes:
+      {{- if $service.resources.shmSize }}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ $service.resources.shmSize }}
+      {{- end }}
+      {{- range $config := $service.configurationFiles }}
+        - name: {{ $name }}-{{ regexReplaceAll "\\..*$" (base $config.path) "" }}
+          configMap:
+            name: {{ $name }}-{{ regexReplaceAll "\\..*$" (base $config.path) "" }}
+      {{- end }}
+
+{{- end }}

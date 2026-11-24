@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAISE-ASR &mdash; Model Evaluation</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260802-2">
+  <script src="/static/i18n.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-title">CAISE-ASR</div>
+    <div class="header-subtitle">
+      <span class="lang-pl">Ocena modelu</span>
+      <span class="lang-en">Model Evaluation</span>
+    </div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link lang-active">Wersja polska</a>
+      <span class="lang-sep">|</span>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle">
+    {% set admin_nav_active = "canary" %}
+    {% include "_admin_nav.html" %}
+  </div>
+  <div class="header-logos">
+    <img src="/static/logo-caise.svg" alt="CAISE" class="logo-caise">
+    <img src="/static/logo-admedvoice.png" alt="ADMEDVOICE" class="logo-admedvoice">
+  </div>
+</header>
+
+<main class="admin-main canary-main">
+  {% if canary_sets or archived_count %}
+  <section class="canary-set-toolbar">
+    <div class="canary-set-picker">
+    {% if canary_sets %}
+    <form method="GET" action="/admin/canary">
+      {% if show_archived %}<input type="hidden" name="show_archived" value="1">{% endif %}
+      <label><span class="lang-pl">Zbiór oceny</span><span class="lang-en">Evaluation set</span>
+        <select name="canary_set_id" onchange="this.form.submit()">
+          {% for canary_set in canary_sets %}
+          <option value="{{ canary_set.id }}" {% if active_set and canary_set.id == active_set.id %}selected{% endif %}>{{ canary_set.name }} · {{ canary_set.status }}{% if canary_set.is_promotion_gate %} · PROMOTION GATE{% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+    {% endif %}
+    {% if archived_count %}
+    <a class="canary-archive-toggle" href="/admin/canary{% if not show_archived %}?show_archived=1{% endif %}">
+      {% if show_archived %}<span class="lang-pl">Ukryj archiwalne</span><span class="lang-en">Hide archived</span>{% else %}<span class="lang-pl">Pokaż archiwalne ({{ archived_count }})</span><span class="lang-en">Show archived ({{ archived_count }})</span>{% endif %}
+    </a>
+    {% endif %}
+    </div>
+    <details>
+      <summary><span class="lang-pl">Utwórz kolejny zbiór oceny</span><span class="lang-en">Create another evaluation set</span></summary>
+      <form method="POST" action="/admin/canary/create" class="canary-create-form">
+        <label><span class="lang-pl">Nazwa</span><span class="lang-en">Name</span><input type="text" name="name" value="Model Evaluation {{ monitor_count + 1 }}" required></label>
+        <label><span class="lang-pl">Ziarno</span><span class="lang-en">Seed</span><input type="number" name="seed" value="42" required></label>
+        <button type="submit" class="btn-secondary"><span class="lang-pl">Utwórz</span><span class="lang-en">Create</span></button>
+      </form>
+    </details>
+  </section>
+  {% endif %}
+  {% if not active_set %}
+  <section class="admin-section canary-intro">
+    <div>
+      <h1><span class="lang-pl">Utwórz stabilny punkt odniesienia</span><span class="lang-en">Create a stable reference point</span></h1>
+      <p class="info-note">
+        <span class="lang-pl">System wylosuje 40 nieadnotowanych nagrań i natychmiast wyłączy je ze wszystkich ścieżek uczenia.</span>
+        <span class="lang-en">The system will select 40 unannotated clips and immediately exclude them from every learning path.</span>
+      </p>
+    </div>
+    <form method="POST" action="/admin/canary/create" class="canary-create-form">
+      <label><span class="lang-pl">Nazwa zbioru</span><span class="lang-en">Set name</span>
+        <input type="text" name="name" value="Model Evaluation 1" required>
+      </label>
+      <label><span class="lang-pl">Ziarno losowania</span><span class="lang-en">Random seed</span>
+        <input type="number" name="seed" value="42" required>
+      </label>
+      <button type="submit" class="btn-trigger">
+        <span class="lang-pl">Wylosuj 40 nagrań</span><span class="lang-en">Select 40 clips</span>
+      </button>
+    </form>
+  </section>
+  {% else %}
+  <section class="admin-section canary-overview">
+    <div>
+      <div class="canary-eyebrow">
+        {{ active_set.name }}
+        {% if active_set.is_promotion_gate %}<span class="health-chip health-chip--available"><span class="lang-pl">Brama promocji</span><span class="lang-en">Promotion gate</span></span>{% endif %}
+      </div>
+      <h1>
+        {% if active_set.status == 'collecting' %}
+        <span class="lang-pl">Transkrypcja punktu kontrolnego</span><span class="lang-en">Control-set transcription</span>
+        {% elif active_set.status == 'ready' %}
+        <span class="lang-pl">Zbiór oceny jest zablokowany</span><span class="lang-en">Evaluation set is locked</span>
+        {% else %}
+        <span class="lang-pl">Zbiór oceny jest archiwalny</span><span class="lang-en">Evaluation set is archived</span>
+        {% endif %}
+      </h1>
+    </div>
+    <div class="canary-progress-block">
+      <div class="canary-progress-value">{{ active_set.verified_count }} / {{ active_set.target_size }}</div>
+      <div class="progress-track" aria-label="Evaluation set transcription progress">
+        <div class="progress-fill" style="width: {{ (active_set.verified_count / active_set.target_size * 100) | round }}%"></div>
+      </div>
+      <div class="canary-provenance">
+        <span><strong>{{ provenance_counts.manual }}</strong> manual</span>
+        <span><strong>{{ provenance_counts.manual_after_reveal }}</strong> GT revealed</span>
+        <span><strong>{{ provenance_counts.copied_gt }}</strong> copied GT</span>
+      </div>
+    </div>
+  </section>
+
+  {% if active_set.status != 'retired' %}
+  <div class="canary-remove-row">
+    {% if active_set.is_promotion_gate %}
+    <span class="gate-protection-note"><span class="lang-pl">Wybierz inną bramę promocji przed archiwizacją tego zbioru.</span><span class="lang-en">Choose another promotion gate before archiving this set.</span></span>
+    {% else %}
+    <form method="POST" action="/admin/canary/remove/{{ active_set.id }}" onsubmit="return confirm('{% if active_set.status == 'collecting' %}Delete this editable draft permanently? Its unused clips will return to the eligible pool.{% else %}Archive this locked monitor? Evaluation history will be preserved.{% endif %}')">
+      <button type="submit" class="btn-destructive">
+        {% if active_set.status == 'collecting' %}<span class="lang-pl">Usuń wersję roboczą</span><span class="lang-en">Delete draft</span>{% else %}<span class="lang-pl">Archiwizuj zbiór</span><span class="lang-en">Archive evaluation set</span>{% endif %}
+      </button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if bulk_result.bulk_copied is not none %}
+  <section class="canary-bulk-result" role="status">
+    <span class="lang-pl">Skopiowano GT: <strong>{{ bulk_result.bulk_copied }}</strong>. Już ukończone: {{ bulk_result.bulk_completed }}. Bez GT: {{ bulk_result.bulk_missing }}.</span>
+    <span class="lang-en">GT copied: <strong>{{ bulk_result.bulk_copied }}</strong>. Already completed: {{ bulk_result.bulk_completed }}. Missing GT: {{ bulk_result.bulk_missing }}.</span>
+  </section>
+  {% endif %}
+
+  {% if active_set.status == 'collecting' %}
+  <section class="admin-section canary-bulk-action">
+    <div>
+      <h2><span class="lang-pl">Szybkie przygotowanie testu</span><span class="lang-en">Fast test setup</span></h2>
+      <p class="info-note"><span class="lang-pl">Wypełnia wszystkie nieukończone pozycje dostępnym GT. Ręczne transkrypcje nie zostaną nadpisane.</span><span class="lang-en">Fills every unfinished item with available GT. Existing manual transcripts will not be overwritten.</span></p>
+    </div>
+    <form method="POST" action="/admin/canary/copy-all/{{ active_set.id }}" onsubmit="return confirm('Copy available GT to every unfinished item?')">
+      <button type="submit" class="btn-secondary">
+        <span class="lang-pl">Kopiuj GT do wszystkich</span><span class="lang-en">Copy GT to all</span>
+      </button>
+    </form>
+  </section>
+  {% elif active_set.status == 'ready' %}
+  <section class="admin-section canary-bulk-action">
+    <div>
+      <h2><span class="lang-pl">Automatyczna ewaluacja</span><span class="lang-en">Automatic evaluation</span></h2>
+      <p class="info-note">
+        <span class="lang-pl">Stan: <strong>{{ evaluation_status }}</strong>{% if evaluation_log %} &middot; {{ evaluation_log }}{% endif %}</span>
+        <span class="lang-en">Status: <strong>{{ evaluation_status }}</strong>{% if evaluation_log %} &middot; {{ evaluation_log }}{% endif %}</span>
+      </p>
+    </div>
+    <div class="canary-frozen-actions">
+      {% if evaluation_status != 'running' %}
+      <form method="POST" action="/admin/canary/evaluate/{{ active_set.id }}">
+        <button type="submit" class="btn-secondary"><span class="lang-pl">Oceń teraz / ponów</span><span class="lang-en">Evaluate now / retry</span></button>
+      </form>
+      {% if not active_set.is_promotion_gate %}
+      <form method="POST" action="/admin/canary/promotion-gate/{{ active_set.id }}" onsubmit="return confirm('Use this locked evaluation set as the policy promotion gate?')">
+        <button type="submit" class="btn-primary"><span class="lang-pl">Użyj jako bramy promocji</span><span class="lang-en">Use for promotion gate</span></button>
+      </form>
+      {% endif %}
+      <form method="POST" action="/admin/canary/unfreeze/{{ active_set.id }}" onsubmit="return confirm('Unfreeze transcripts for inspection and editing? Existing evaluations remain historical.')">
+        <button type="submit" class="btn-secondary">
+          <span class="lang-pl">Odblokuj transkrypcje</span><span class="lang-en">Unfreeze transcripts</span>
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </section>
+  {% else %}
+  <section class="canary-bulk-result">
+    <span class="lang-pl">Monitor archiwalny jest tylko do odczytu. Jego wyniki pozostają w bazie audytowej.</span>
+    <span class="lang-en">This archived monitor is read-only. Its results remain in the audit database.</span>
+  </section>
+  {% endif %}
+
+  {% if current_item and active_set.status == 'collecting' %}
+  <section class="admin-section canary-workbench">
+    <div class="canary-item-head">
+      <span class="queue-threshold-chip">{{ active_set.verified_count + 1 }} / {{ active_set.target_size }}</span>
+      <span>{{ current_item.dataset }}</span>
+      {% if current_item.gt_available %}<span class="health-chip health-chip--available">GT available</span>{% endif %}
+    </div>
+
+    <audio controls preload="metadata" src="/admin/canary/audio/{{ current_item.id }}"></audio>
+
+    <form method="POST" action="/admin/canary/transcript" id="canary-transcript-form">
+      <input type="hidden" name="item_id" value="{{ current_item.id }}">
+      <input type="hidden" name="copied_gt" id="copied-gt" value="false">
+      <label for="canary-transcript" class="canary-transcript-label">
+        <span class="lang-pl">Zaufana transkrypcja</span><span class="lang-en">Trusted transcript</span>
+      </label>
+      <textarea id="canary-transcript" name="transcript" rows="5" required autocomplete="off"></textarea>
+
+      {% if current_item.gt_available %}
+      <details class="canary-gt" id="canary-gt-details">
+        <summary>
+          <span class="lang-pl">Transkrypcja GT jest domyślnie ukryta</span>
+          <span class="lang-en">Ground truth is hidden by default</span>
+        </summary>
+        <p class="info-note">
+          <span class="lang-pl">Ujawnienie zostanie zapisane w pochodzeniu benchmarku.</span>
+          <span class="lang-en">Revealing it will be recorded in benchmark provenance.</span>
+        </p>
+        <button type="button" class="btn-secondary" id="reveal-gt" onclick="revealGroundTruth()">
+          <span class="lang-pl">Pokaż GT</span><span class="lang-en">Reveal GT</span>
+        </button>
+        <div id="gt-result" class="canary-gt-result" hidden>
+          <div id="gt-text"></div>
+          <button type="button" class="btn-secondary" onclick="copyGroundTruth()">
+            <span class="lang-pl">Kopiuj GT do pola</span><span class="lang-en">Copy GT to transcript</span>
+          </button>
+        </div>
+      </details>
+      {% endif %}
+
+      <div class="canary-actions">
+        <button type="submit" class="btn-trigger">
+          <span class="lang-pl">Zapisz i przejdź dalej</span><span class="lang-en">Save and continue</span>
+        </button>
+      </div>
+    </form>
+  </section>
+  {% elif active_set.status == 'collecting' %}
+  <section class="admin-section canary-ready">
+    <div>
+      <h2><span class="lang-pl">Wszystkie transkrypcje są gotowe</span><span class="lang-en">All transcripts are ready</span></h2>
+      <p class="info-note"><span class="lang-pl">Zablokowanie uniemożliwi ich dalszą edycję i uruchomi ewaluację modeli.</span><span class="lang-en">Locking makes them immutable and starts model evaluation.</span></p>
+    </div>
+    <form method="POST" action="/admin/canary/freeze/{{ active_set.id }}">
+      <button type="submit" class="btn-trigger"><span class="lang-pl">Zablokuj zbiór</span><span class="lang-en">Lock set</span></button>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="admin-section">
+    <h2><span class="lang-pl">Pozycje zbioru oceny</span><span class="lang-en">Evaluation set items</span></h2>
+    <div class="canary-item-grid">
+      {% for item in items %}
+      <div class="canary-item-dot {% if item.verified_at %}canary-item-dot--done{% endif %}" title="{{ loop.index }}: {{ item.transcript_provenance or 'pending' }}">{{ loop.index }}</div>
+      {% endfor %}
+    </div>
+    <div class="canary-transcript-table-wrap">
+      <table class="canary-transcript-table">
+        <thead>
+          <tr><th>#</th><th>ID</th><th>Audio</th><th><span class="lang-pl">Pochodzenie</span><span class="lang-en">Provenance</span></th><th><span class="lang-pl">Transkrypcja</span><span class="lang-en">Transcript</span></th>{% if active_set.status == 'collecting' %}<th></th>{% endif %}</tr>
+        </thead>
+        <tbody>
+        {% for item in items %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td class="canary-identifiers">
+              <code title="Evaluation set item ID">{{ item.id[:8] }}</code>
+              <small title="Audio ID">audio {{ item.audio_id[:8] }}</small>
+            </td>
+            <td><audio controls preload="none" src="/admin/canary/audio/{{ item.id }}"></audio></td>
+            <td>{{ item.transcript_provenance or "pending" }}</td>
+            <td>
+              {% if active_set.status == 'collecting' and item.verified_at %}
+              <form method="POST" action="/admin/canary/transcript" class="canary-inline-edit">
+                <input type="hidden" name="item_id" value="{{ item.id }}">
+                <input type="hidden" name="copied_gt" value="false">
+                <textarea name="transcript" rows="3" required>{{ item.transcript }}</textarea>
+                <button type="submit" class="btn-secondary"><span class="lang-pl">Zapisz</span><span class="lang-en">Save</span></button>
+              </form>
+              {% else %}
+              <div class="canary-stored-transcript">{{ item.transcript or "—" }}</div>
+              {% endif %}
+            </td>
+            {% if active_set.status == 'collecting' %}
+            <td>
+              <form method="POST" action="/admin/canary/reroll/{{ item.id }}" onsubmit="return confirm('Replace this faulty recording and exclude it from future training?')">
+                <button type="submit" class="btn-secondary"><span class="lang-pl">Wylosuj ponownie</span><span class="lang-en">Reroll</span></button>
+              </form>
+            </td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</main>
+
+<script>
+let revealedGroundTruth = "";
+async function revealGroundTruth() {
+  const response = await fetch("/admin/canary/reveal/{{ current_item.id if current_item else '' }}", { method: "POST" });
+  if (!response.ok) {
+    alert(await response.text());
+    return;
+  }
+  const data = await response.json();
+  revealedGroundTruth = data.transcript;
+  document.getElementById("gt-text").textContent = revealedGroundTruth;
+  document.getElementById("gt-result").hidden = false;
+  document.getElementById("reveal-gt").hidden = true;
+}
+function copyGroundTruth() {
+  document.getElementById("canary-transcript").value = revealedGroundTruth;
+  document.getElementById("copied-gt").value = "true";
+}
+document.getElementById("canary-transcript")?.addEventListener("input", () => {
+  if (document.getElementById("canary-transcript").value !== revealedGroundTruth) {
+    document.getElementById("copied-gt").value = "false";
+  }
+});
+</script>
+</body>
+</html>

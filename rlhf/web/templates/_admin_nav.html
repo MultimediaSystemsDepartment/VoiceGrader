@@ -1,0 +1,36 @@
+<nav class="admin-nav" aria-label="Admin navigation">
+  <span class="admin-badge">Admin</span>
+  <a href="/annotate" class="header-link">
+    <span class="lang-pl">Adnotuj</span><span class="lang-en">Annotate</span>
+  </a>
+  <a href="/admin/canary" class="header-link{% if admin_nav_active == 'canary' %} header-link--active{% endif %}"{% if admin_nav_active == 'canary' %} aria-current="page"{% endif %}>
+    <span class="lang-pl">Ocena modelu</span><span class="lang-en">Model Evaluation</span>
+  </a>
+  <a href="/admin/model-health" class="header-link{% if admin_nav_active == 'model-health' %} header-link--active{% endif %}"{% if admin_nav_active == 'model-health' %} aria-current="page"{% endif %}>
+    <span class="lang-pl">Modele i publikacja</span><span class="lang-en">Models &amp; Publishing</span>
+  </a>
+  <a href="/admin/reward-audit" class="header-link{% if admin_nav_active == 'reward-audit' %} header-link--active{% endif %}"{% if admin_nav_active == 'reward-audit' %} aria-current="page"{% endif %}>
+    <span class="lang-pl">Audyt nagrody</span><span class="lang-en">Reward Audit</span>
+  </a>
+  <a href="/admin/annotation-audit" class="header-link{% if admin_nav_active == 'annotation-audit' %} header-link--active{% endif %}"{% if admin_nav_active == 'annotation-audit' %} aria-current="page"{% endif %}>
+    <span class="lang-pl">Audyt adnotacji</span><span class="lang-en">Annotation Audit</span>
+  </a>
+  <a href="/admin/corpora" class="header-link{% if admin_nav_active == 'corpora' %} header-link--active{% endif %}"{% if admin_nav_active == 'corpora' %} aria-current="page"{% endif %}>
+    <span class="lang-pl">Zbiory nagrań</span><span class="lang-en">Audio Corpora</span>
+  </a>
+  <a href="/admin/diagnostics" class="header-link{% if admin_nav_active == 'diagnostics' %} header-link--active{% endif %}"{% if admin_nav_active == 'diagnostics' %} aria-current="page"{% endif %}>
+    <span class="lang-pl">Diagnostyka</span><span class="lang-en">Diagnostics</span>
+  </a>
+  <a href="/admin/tts" class="header-link{% if admin_nav_active == 'tts' %} header-link--active{% endif %}">
+    <span class="lang-pl">Augmentacja TTS</span><span class="lang-en">TTS Augmentation</span>
+  </a>
+  <a href="/admin" class="header-link{% if admin_nav_active == 'admin' %} header-link--active{% endif %}"{% if admin_nav_active == 'admin' %} aria-current="page"{% endif %}>
+    <span class="lang-pl">Panel</span><span class="lang-en">Dashboard</span>
+  </a>
+  <form method="POST" action="/admin/logout">
+    <button type="submit" class="btn-link">
+      <span class="lang-pl">Wyloguj</span><span class="lang-en">Logout</span>
+    </button>
+  </form>
+  <a href="/admin/password" class="header-link{% if admin_nav_active == 'password' %} header-link--active{% endif %}"{% if admin_nav_active == 'password' %} aria-current="page"{% endif %}><span class="lang-pl">Zmień hasło</span><span class="lang-en">Change Password</span></a>
+</nav>

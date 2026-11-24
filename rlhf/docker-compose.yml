@@ -1,0 +1,192 @@
+# docker-compose.yml -- RLHF-ASR Training System
+#
+# WORKFLOW
+# --------
+# 1. First-time data setup (generates manifest CSVs from ZIP archives):
+#        docker compose run --rm prepare
+#    NOTE: 'coordinator' also runs this automatically on startup if manifests
+#    are missing and _data/archive.zip is present -- this step is only needed
+#    if you want to prepare data without starting the coordinator, or if
+#    archive.zip wasn't present yet at coordinator startup.
+#
+# 2. Build the audio catalogue and generate hypothesis pairs (GPU):
+#        docker compose run --rm generate
+#
+# 3. Start the web annotation UI and annotate in your browser at http://localhost:8080:
+#        docker compose up web
+#
+# 4. Start the coordinator for automated training rounds (GPU):
+#        docker compose up coordinator
+#    It trains an immutable reward model, optionally runs SFT, generates
+#    ephemeral synthetic preferences, and runs DPO with WER evaluation.
+#
+# 5. Repeat from step 2 with the updated model.
+#
+# REQUIREMENTS
+# ------------
+# - nvidia-container-toolkit installed on the host (for GPU services)
+# - ZIP archives placed in _data/ before running 'prepare'
+#   Expected files:
+#       _data/archive.zip                        (ADMEDVOICE)
+#       _data/cv-corpus-25.0-2026-03-09.zip      (CommonVoice)
+#
+# VOLUMES
+# -------
+# _data/    : input data (ZIP archives + generated manifests)
+# _outputs/ : database, checkpoints, logs (persisted on host)
+# default_paths.json : updated by 'prepare' with manifest paths
+
+name: rlhf-asr
+
+# ---------------------------------------------------------------------------
+# Shared config snippets
+# ---------------------------------------------------------------------------
+
+x-gpu-service: &gpu-service
+  build:
+    context: .
+    dockerfile: Dockerfile
+  volumes:
+    - ./_data:/app/_data
+    - ./_outputs:/app/_outputs
+    - ./default_paths.json:/app/default_paths.json
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Web annotation UI (no GPU)
+  # Start: docker compose up web
+  # Open:  http://localhost:8080
+  # --------------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app                              # live source mount — edits take effect on restart, no rebuild
+      - ./_data:/app/_data
+      - ./_outputs:/app/_outputs
+      - ./default_paths.json:/app/default_paths.json
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # --------------------------------------------------------------------------
+  # One-time data preparation (no GPU needed)
+  # Reads ZIP archives from _data/, writes manifest CSVs, updates default_paths.json.
+  # Run once before first use, and again if you add new data.
+  # --------------------------------------------------------------------------
+  prepare:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python3 prepare_data.py --datasets admedvoice
+    volumes:
+      - ./_data:/app/_data
+      - ./_outputs:/app/_outputs
+      - ./default_paths.json:/app/default_paths.json
+
+  # --------------------------------------------------------------------------
+  # Hypothesis pair generation (Whisper, GPU)
+  # Transcribes audio clips twice and inserts pending pairs into the DB.
+  # Override --n and --datasets as needed:
+  #   docker compose run --rm generate python3 run_generate_pairs.py --n 500
+  # --------------------------------------------------------------------------
+  generate:
+    <<: *gpu-service
+    command: python3 run_generate_pairs.py --n 200 --datasets admedvoice
+
+  # --------------------------------------------------------------------------
+  # Reward model training (GPU)
+  # Trains AudioTextRewardModel on human preference annotations.
+  # The coordinator creates an immutable checkpoint for each training round.
+  # --------------------------------------------------------------------------
+  train_reward:
+    <<: *gpu-service
+    command: python3 run_train_reward.py
+
+  # --------------------------------------------------------------------------
+  # Compatibility/analysis reward scoring (AudioTextRewardModel, GPU)
+  # Persists scores for offline inspection only; automated DPO does not use it.
+  # --------------------------------------------------------------------------
+  score:
+    <<: *gpu-service
+    command: python3 run_score_rewards.py
+
+  # --------------------------------------------------------------------------
+  # SFT fine-tuning (Whisper + LoRA, GPU)
+  # Trains on human-typed corrections. Output: _outputs/checkpoints/sft/
+  # --------------------------------------------------------------------------
+  sft:
+    <<: *gpu-service
+    command: python3 run_sft.py --epochs 3
+
+  # --------------------------------------------------------------------------
+  # DPO fine-tuning (Whisper + LoRA, GPU)
+  # Trains on preference pairs. Resumes from SFT checkpoint by default.
+  # Override checkpoint: docker compose run --rm dpo python3 run_rlhf.py --resume _outputs/checkpoints/my_ckpt
+  # --------------------------------------------------------------------------
+  dpo:
+    <<: *gpu-service
+    command: python3 run_rlhf.py --resume _outputs/checkpoints/sft
+    environment:
+      - EVAL_MAX_SAMPLES=40
+
+  # --------------------------------------------------------------------------
+  # WER evaluation
+  # Prints a table of all training runs with WER before/after each round.
+  # --------------------------------------------------------------------------
+  evaluate:
+    <<: *gpu-service
+    command: python3 run_evaluate.py --report
+    environment:
+      - EVAL_MAX_SAMPLES=40
+
+  # --------------------------------------------------------------------------
+  # Training coordinator (GPU, always-on)
+  # Polls the DB every 30 s for a manual trigger or the auto-training threshold.
+  # Runs: train reward -> optional SFT -> synthetic data -> DPO/evaluation.
+  # Pair refill is separate and resumes with the newly published policy.
+  # Annotation via the 'web' service continues uninterrupted during training
+  # (SQLite WAL mode + separate containers).
+  #
+  # Start alongside the web service:
+  #     docker compose up web coordinator
+  #
+  # Environment overrides:
+  #     COORDINATOR_POLL_INTERVAL=30  -- seconds between DB polls
+  #     EVAL_MAX_SAMPLES=40           -- test examples per evaluation split (0=full set)
+  # --------------------------------------------------------------------------
+  coordinator:
+    <<: *gpu-service
+    command: python3.12 scripts/coordinator.py
+    restart: unless-stopped
+    volumes:
+      - .:/app                              # live source mount — edits take effect on restart, no rebuild
+      - ./_data:/app/_data
+      - ./_outputs:/app/_outputs
+      - ./default_paths.json:/app/default_paths.json
+    environment:
+      - COORDINATOR_POLL_INTERVAL=30
+      - EVAL_MAX_SAMPLES=40
+      - DIAGNOSTICS_INTERVAL_SECONDS=5
+      - DIAGNOSTICS_PARTIAL_BUNDLE_SECONDS=60
+      - DIAGNOSTICS_PROC_ROOT=/proc
+      - DIAGNOSTICS_GPU_INDEX=0
+      - DIAGNOSTICS_WEB_URL=http://web:8080/api/stats

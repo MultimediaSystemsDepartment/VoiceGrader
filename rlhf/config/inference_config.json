@@ -1,0 +1,11 @@
+{
+  "model_id": "openai/whisper-large-v3",
+  "device": "cuda",
+  "torch_dtype": "float16",
+  "attn_implementation": "sdpa",
+  "batch_size": 1,
+  "target_batch_size": 50,
+  "nbest_temperature": 0.8,
+  "datasets": ["admedvoice"],
+  "splits": ["train"]
+}

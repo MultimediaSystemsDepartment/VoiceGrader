@@ -1,0 +1,6 @@
+**/__pycache__
+**/.venv
+/data/models/*
+/asr_processor/nisqalib
+/asr_processor/models
+/asr_processor/checkpoints

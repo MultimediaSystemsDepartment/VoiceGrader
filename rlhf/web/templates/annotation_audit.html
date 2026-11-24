@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAISE-ASR &mdash; Annotation Audit</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260802-4">
+  <script src="/static/i18n.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-title">CAISE-ASR</div>
+    <div class="header-subtitle"><span class="lang-pl">Audyt adnotacji</span><span class="lang-en">Annotation Audit</span></div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link lang-active">Wersja polska</a>
+      <span class="lang-sep">|</span>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle">
+    {% set admin_nav_active = "annotation-audit" %}
+    {% include "_admin_nav.html" %}
+  </div>
+  <div class="header-logos">
+    <img src="/static/logo-caise.svg" alt="CAISE" class="logo-caise">
+    <img src="/static/logo-admedvoice.png" alt="ADMEDVOICE" class="logo-admedvoice">
+  </div>
+</header>
+
+<main class="admin-main annotation-audit-main">
+  <div class="annotation-audit-heading">
+    <div>
+      <h1><span class="lang-pl">Audyt adnotacji</span><span class="lang-en">Annotation Audit</span></h1>
+      <p class="info-note"><span class="lang-pl">Wyciszone dane nie trafią do przyszłych uruchomień treningu.</span><span class="lang-en">Muted data is excluded from future training runs.</span></p>
+    </div>
+    {% if training_running %}
+    <span class="training-badge training-badge--running"><span class="lang-pl">Trening w toku: bieżący snapshot bez zmian</span><span class="lang-en">Training running: current snapshot unchanged</span></span>
+    {% endif %}
+  </div>
+
+  <nav class="audit-view-tabs" aria-label="Audit view">
+    <a href="/admin/annotation-audit?view=interactions" class="audit-view-tab{% if view == 'interactions' %} audit-view-tab--active{% endif %}"><span class="lang-pl">Interakcje i moderacja</span><span class="lang-en">Interactions &amp; moderation</span></a>
+    <a href="/admin/annotation-audit?view=excluded" class="audit-view-tab{% if view == 'excluded' %} audit-view-tab--active{% endif %}"><span class="lang-pl">Wykluczone nagrania</span><span class="lang-en">Excluded recordings</span></a>
+  </nav>
+
+  {% if view == "excluded" %}
+  <section class="admin-section">
+    <div class="annotation-section-head">
+      <div>
+        <h2><span class="lang-pl">Wykluczone nagrania</span><span class="lang-en">Excluded recordings</span></h2>
+        <p class="info-note"><span class="lang-pl">Nagrania te są wyłączone z kolejek, adnotacji i treningu.</span><span class="lang-en">These recordings are excluded from queues, annotation, and training.</span></p>
+      </div>
+      <form method="GET" action="/admin/annotation-audit" class="annotation-filter-form">
+        <input type="hidden" name="view" value="excluded">
+        <label><span class="lang-pl">Zbiór</span><span class="lang-en">Dataset</span>
+          <select name="dataset"><option value="">All</option>{% for name in excluded_datasets %}<option value="{{ name }}" {% if dataset == name %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+        </label>
+        <label><span class="lang-pl">Stan</span><span class="lang-en">State</span>
+          <select name="state"><option value="all" {% if state == 'all' %}selected{% endif %}>All</option><option value="excluded" {% if state == 'excluded' %}selected{% endif %}>Excluded</option><option value="restored" {% if state == 'restored' %}selected{% endif %}>Restored</option></select>
+        </label>
+        <label><span class="lang-pl">Szukaj</span><span class="lang-en">Search</span>
+          <input type="search" name="query" value="{{ query }}" placeholder="ID, path, reason, transcript">
+        </label>
+        <button type="submit" class="btn-secondary"><span class="lang-pl">Filtruj</span><span class="lang-en">Filter</span></button>
+      </form>
+    </div>
+    <div class="health-table-wrap">
+      <table class="health-table excluded-audio-table">
+        <thead><tr><th><span class="lang-pl">Nagranie</span><span class="lang-en">Recording</span></th><th><span class="lang-pl">Zbiór / parametry</span><span class="lang-en">Dataset / properties</span></th><th><span class="lang-pl">Adnotator</span><span class="lang-en">Annotator</span></th><th><span class="lang-pl">Stan / ostatnia decyzja</span><span class="lang-en">State / latest decision</span></th><th><span class="lang-pl">Transkrypcja referencyjna</span><span class="lang-en">Reference transcript</span></th><th><span class="lang-pl">Historia</span><span class="lang-en">History</span></th><th><span class="lang-pl">Akcja</span><span class="lang-en">Action</span></th></tr></thead>
+        <tbody>
+        {% for item in excluded_audio %}
+          <tr class="{% if not item.excluded %}annotation-row--muted{% endif %}">
+            <td>
+              <audio controls preload="none" src="/admin/annotation-audit/excluded-audio/{{ item.audio_id }}"></audio>
+              <span class="canary-identifiers"><code title="Audio ID">audio {{ item.audio_id }}</code></span>
+              <small title="{{ item.file_path }}">{{ item.file_path | replace('\\', '/') }}</small>
+            </td>
+            <td><strong>{{ item.dataset }}</strong><small>{% if item.duration_s is not none %}{{ "%.2f" | format(item.duration_s) }} s{% else %}&mdash;{% endif %}<br>{% if item.sample_rate %}{{ item.sample_rate }} Hz{% else %}&mdash;{% endif %}</small></td>
+            <td><strong>{{ item.excluded_by or "AK" }}</strong><small><span class="lang-pl">pierwotne wykluczenie</span><span class="lang-en">original exclusion</span></small></td>
+            <td>{% if item.excluded %}<span class="health-status health-status--warning"><span class="lang-pl">wykluczone</span><span class="lang-en">excluded</span></span>{% else %}<span class="health-status health-status--healthy"><span class="lang-pl">przywrócone</span><span class="lang-en">restored</span></span>{% endif %}<small><strong>{{ item.latest_actor or item.excluded_by or "AK" }}</strong>: {{ item.latest_reason or item.exclusion_reason or "unspecified" }}<br>{{ item.latest_action_at or item.created_at }}</small></td>
+            <td class="excluded-transcript">{{ item.reference_transcript or "—" }}</td>
+            <td><strong>{{ item.pair_count }}</strong> <span class="lang-pl">par</span><span class="lang-en">pairs</span><small>{{ item.annotation_count }} <span class="lang-pl">adnotacji</span><span class="lang-en">annotations</span><br>{{ item.created_at }}</small></td>
+            <td><form method="POST" action="/admin/annotation-audit/audio-curation" class="moderation-form" onsubmit="return confirm('{{ 'Restore this recording to the eligible dataset?' if item.excluded else 'Exclude this recording again?' }}')"><input type="hidden" name="audio_id" value="{{ item.audio_id }}"><input type="hidden" name="action" value="{{ 'restore' if item.excluded else 'exclude' }}"><input type="text" name="reason" required maxlength="240" placeholder="Reason"><button type="submit" class="{{ 'btn-secondary' if item.excluded else 'btn-destructive' }}"><span class="lang-pl">{{ 'Przywróć' if item.excluded else 'Wyklucz ponownie' }}</span><span class="lang-en">{{ 'Restore' if item.excluded else 'Re-exclude' }}</span></button></form></td>
+          </tr>
+        {% else %}<tr><td colspan="7"><span class="lang-pl">Brak wykluczonych nagrań dla wybranego filtra.</span><span class="lang-en">No excluded recordings match this filter.</span></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <nav class="annotation-pagination" aria-label="Pagination">
+      {% if page > 1 %}<a class="btn-secondary" href="/admin/annotation-audit?view=excluded&page={{ page - 1 }}&dataset={{ dataset | urlencode }}&state={{ state }}&query={{ query | urlencode }}">Previous</a>{% endif %}
+      <span>Page {{ page }}</span>
+      {% if excluded_audio | length == 100 %}<a class="btn-secondary" href="/admin/annotation-audit?view=excluded&page={{ page + 1 }}&dataset={{ dataset | urlencode }}&state={{ state }}&query={{ query | urlencode }}">Next</a>{% endif %}
+    </nav>
+  </section>
+  {% else %}
+  <section class="admin-section">
+    <div class="annotation-section-head">
+      <h2><span class="lang-pl">Adnotatorzy</span><span class="lang-en">Annotators</span></h2>
+      <span>{{ annotators | length }}</span>
+    </div>
+    <div class="health-table-wrap">
+      <table class="health-table annotator-audit-table">
+        <thead><tr><th>ID</th><th><span class="lang-pl">Sesje</span><span class="lang-en">Sessions</span></th><th><span class="lang-pl">Odpowiedzi</span><span class="lang-en">Answers</span></th><th><span class="lang-pl">Ostatnio</span><span class="lang-en">Last seen</span></th><th><span class="lang-pl">Stan</span><span class="lang-en">State</span></th><th><span class="lang-pl">Akcja</span><span class="lang-en">Action</span></th></tr></thead>
+        <tbody>
+        {% for annotator in annotators %}
+          <tr class="{% if annotator.is_muted %}annotation-row--muted{% endif %}">
+            <td><strong>{{ annotator.participant_id }}</strong></td>
+            <td>{{ annotator.session_count }}</td>
+            <td>{{ annotator.annotation_count }} <small>({{ annotator.actionable_count or 0 }} A/B)</small></td>
+            <td>{{ annotator.last_seen or "—" }}</td>
+            <td>{% if annotator.is_muted %}<span class="health-status health-status--warning"><span class="lang-pl">wyciszony</span><span class="lang-en">muted</span></span>{% else %}<span class="health-status health-status--healthy"><span class="lang-pl">aktywny</span><span class="lang-en">active</span></span>{% endif %}</td>
+            <td>
+              <form method="POST" action="/admin/annotation-audit/annotator" class="moderation-form" onsubmit="return confirm('{{ 'Unmute' if annotator.is_muted else 'Mute' }} all annotations from this self-declared ID?')">
+                <input type="hidden" name="participant_id" value="{{ annotator.participant_id }}">
+                <input type="hidden" name="action" value="{{ 'unmute' if annotator.is_muted else 'mute' }}">
+                <input type="text" name="reason" required maxlength="240" placeholder="Reason">
+                <button type="submit" class="{{ 'btn-secondary' if annotator.is_muted else 'btn-destructive' }}"><span class="lang-pl">{{ 'Włącz' if annotator.is_muted else 'Wycisz' }}</span><span class="lang-en">{{ 'Unmute' if annotator.is_muted else 'Mute' }}</span></button>
+              </form>
+            </td>
+          </tr>
+        {% else %}<tr><td colspan="6"><span class="lang-pl">Brak adnotatorów.</span><span class="lang-en">No annotators.</span></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="admin-section">
+    <div class="annotation-section-head">
+      <h2><span class="lang-pl">Interakcje</span><span class="lang-en">Interactions</span></h2>
+      <form method="GET" action="/admin/annotation-audit" class="annotation-filter-form">
+        <label><span class="lang-pl">Adnotator</span><span class="lang-en">Annotator</span>
+          <select name="participant_id"><option value="">All</option>{% for annotator in annotators %}<option value="{{ annotator.participant_id }}" {% if participant_id == annotator.participant_id %}selected{% endif %}>{{ annotator.participant_id }}</option>{% endfor %}</select>
+        </label>
+        <label><span class="lang-pl">Stan</span><span class="lang-en">State</span>
+          <select name="state"><option value="all" {% if state == 'all' %}selected{% endif %}>All</option><option value="active" {% if state == 'active' %}selected{% endif %}>Active</option><option value="muted" {% if state == 'muted' %}selected{% endif %}>Muted</option></select>
+        </label>
+        <button type="submit" class="btn-secondary"><span class="lang-pl">Filtruj</span><span class="lang-en">Filter</span></button>
+      </form>
+    </div>
+    <div class="health-table-wrap">
+      <table class="health-table annotation-audit-table">
+        <thead><tr><th>Audio / IDs</th><th>A / B</th><th><span class="lang-pl">Odpowiedź</span><span class="lang-en">Answer</span></th><th><span class="lang-pl">Nagroda</span><span class="lang-en">Reward</span></th><th><span class="lang-pl">Adnotator / czas</span><span class="lang-en">Annotator / time</span></th><th><span class="lang-pl">Moderacja</span><span class="lang-en">Moderation</span></th></tr></thead>
+        <tbody>
+        {% for item in annotations %}
+          <tr class="{% if item.effective_muted %}annotation-row--muted{% endif %}">
+            <td>
+              <audio controls preload="none" src="/admin/annotation-audit/audio/{{ item.pair_id }}"></audio>
+              <span class="canary-identifiers"><code title="Annotation ID">ann {{ item.annotation_id[:8] }}</code><code title="Pair ID">pair {{ item.pair_id[:8] }}</code><small title="Audio ID">audio {{ item.audio_id[:8] }}</small></span>
+              <small title="{{ item.file_path }}">{{ item.file_path | replace('\\', '/') | truncate(42, True, '…') }}</small>
+            </td>
+            <td class="annotation-pair-text"><div><strong>A</strong> {{ item.hyp_a }}<small>{{ item.strategy_a }}</small></div><div><strong>B</strong> {{ item.hyp_b }}<small>{{ item.strategy_b }}</small></div></td>
+            <td><strong>{{ item.preference | upper }}</strong>{% if item.preference_strength is not none %}<small>{{ "%.1f" | format(item.preference_strength * 10) }}/10</small>{% endif %}{% if item.correction_text %}<blockquote>{{ item.correction_text }}</blockquote>{% endif %}{% if item.notes %}<small>{{ item.notes }}</small>{% endif %}</td>
+            <td>{% if item.reward_a is not none %}<div>A {{ "%.4f" | format(item.reward_a) }}</div><div>B {{ "%.4f" | format(item.reward_b) }}</div><small>{{ item.reward_source }}<br>{{ item.scored_at }}</small>{% else %}&mdash;{% endif %}</td>
+            <td><strong>{{ item.participant_id }}</strong><small>{{ item.machine_id }}<br>{{ item.annotated_at }}</small></td>
+            <td>
+              {% if item.annotator_muted %}<span class="health-status health-status--warning"><span class="lang-pl">adnotator wyciszony</span><span class="lang-en">annotator muted</span></span>{% endif %}
+              <form method="POST" action="/admin/annotation-audit/annotation" class="moderation-form" onsubmit="return confirm('{{ 'Unmute' if item.is_muted else 'Mute' }} this annotation?')">
+                <input type="hidden" name="annotation_id" value="{{ item.annotation_id }}">
+                <input type="hidden" name="action" value="{{ 'unmute' if item.is_muted else 'mute' }}">
+                <input type="text" name="reason" required maxlength="240" placeholder="Reason">
+                <button type="submit" class="{{ 'btn-secondary' if item.is_muted else 'btn-destructive' }}"><span class="lang-pl">{{ 'Włącz' if item.is_muted else 'Wycisz' }}</span><span class="lang-en">{{ 'Unmute' if item.is_muted else 'Mute' }}</span></button>
+              </form>
+            </td>
+          </tr>
+        {% else %}<tr><td colspan="6"><span class="lang-pl">Brak interakcji dla wybranego filtra.</span><span class="lang-en">No interactions for this filter.</span></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <nav class="annotation-pagination" aria-label="Pagination">
+      {% if page > 1 %}<a class="btn-secondary" href="/admin/annotation-audit?page={{ page - 1 }}&state={{ state }}&participant_id={{ participant_id | urlencode }}">Previous</a>{% endif %}
+      <span>Page {{ page }}</span>
+      {% if annotations | length == 100 %}<a class="btn-secondary" href="/admin/annotation-audit?page={{ page + 1 }}&state={{ state }}&participant_id={{ participant_id | urlencode }}">Next</a>{% endif %}
+    </nav>
+  </section>
+
+  <section class="admin-section">
+    <div class="annotation-section-head"><h2><span class="lang-pl">Historia moderacji</span><span class="lang-en">Moderation history</span></h2></div>
+    <div class="health-table-wrap"><table class="health-table"><thead><tr><th><span class="lang-pl">Czas</span><span class="lang-en">Time</span></th><th><span class="lang-pl">Cel</span><span class="lang-en">Target</span></th><th><span class="lang-pl">Akcja</span><span class="lang-en">Action</span></th><th><span class="lang-pl">Powód</span><span class="lang-en">Reason</span></th><th><span class="lang-pl">Autor</span><span class="lang-en">Actor</span></th></tr></thead><tbody>{% for event in events %}<tr><td>{{ event.created_at }}</td><td>{{ event.target_type }} · <code>{{ event.target_id }}</code></td><td>{{ event.action }}</td><td>{{ event.reason or "—" }}</td><td>{{ event.actor }}</td></tr>{% else %}<tr><td colspan="5"><span class="lang-pl">Brak zdarzeń moderacji.</span><span class="lang-en">No moderation events.</span></td></tr>{% endfor %}</tbody></table></div>
+  </section>
+  {% endif %}
+</main>
+</body>
+</html>

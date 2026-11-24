@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAISE-ASR &mdash; Audio Corpora</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260802-4">
+  <script src="/static/i18n.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-title">CAISE-ASR</div>
+    <div class="header-subtitle"><span class="lang-pl">Zbiory nagrań</span><span class="lang-en">Audio Corpora</span></div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link lang-active">Wersja polska</a>
+      <span class="lang-sep">|</span>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle">
+    {% set admin_nav_active = "corpora" %}
+    {% include "_admin_nav.html" %}
+  </div>
+  <div class="header-logos">
+    <img src="/static/logo-caise.svg" alt="CAISE" class="logo-caise">
+    <img src="/static/logo-admedvoice.png" alt="ADMEDVOICE" class="logo-admedvoice">
+  </div>
+</header>
+<main class="admin-main annotation-audit-main">
+  <section class="admin-section">
+    <div class="annotation-audit-heading">
+      <h1><span class="lang-pl">Zbiory nagrań</span><span class="lang-en">Audio Corpora</span></h1>
+      {% if training_running %}<span class="training-badge training-badge--running"><span class="lang-pl">Trening w toku: bieżący snapshot bez zmian</span><span class="lang-en">Training running: current snapshot unchanged</span></span>{% endif %}
+    </div>
+    <nav class="annotation-pagination">
+      <a class="btn-secondary" href="/admin/corpora?tab=training"><span class="lang-pl">Zbiory treningowe</span><span class="lang-en">Training corpora</span></a>
+      <a class="btn-secondary" href="/admin/corpora?tab=evaluation"><span class="lang-pl">Zbiory testowe</span><span class="lang-en">Evaluation sets</span></a>
+    </nav>
+    {% if error %}<p role="alert" class="info-note">{{ error }}</p>{% endif %}
+    <h2><span class="lang-pl">Import z walidacją</span><span class="lang-en">Validated import</span></h2>
+    <p class="info-note"><span class="lang-pl">CSV UTF-8, separator średnik, kolumny <code>file_path;transcript</code>. Ścieżki to nazwy przesłanych plików, bez katalogów. 1–200 nagrań, 0.1–30 s, razem do 500 MiB; CSV do 1 MiB. Teksty są wymagane dla testów. Po walidacji przejrzyj podgląd i zatwierdź import.</span><span class="lang-en">UTF-8 CSV, semicolon delimiter, columns <code>file_path;transcript</code>. Paths are uploaded filenames without directories. 1–200 recordings, 0.1–30 s, up to 500 MiB total; CSV up to 1 MiB. Transcripts are required for evaluation. Review the validated preview before accepting.</span></p>
+    <form method="POST" action="/admin/corpora/import?tab={{ tab }}" enctype="multipart/form-data">
+      <input type="hidden" name="purpose" value="{{ tab }}">
+      <label><span class="lang-pl">Nazwa</span><span class="lang-en">Name</span><input name="name" required maxlength="180"></label>
+      <label>CSV<input type="file" name="manifest" accept=".csv" required></label>
+      <label><span class="lang-pl">Nagrania</span><span class="lang-en">Audio files</span><input type="file" name="audio" accept="audio/*,.wav,.flac,.ogg,.mp3" multiple required></label>
+      <button class="btn-secondary" type="submit"><span class="lang-pl">Sprawdź i pokaż podgląd</span><span class="lang-en">Validate and preview</span></button>
+    </form>
+    <p class="info-note"><span class="lang-pl">Zbiory treningowe wymagają osobnej aktywacji. Zbiory testowe nigdy nie służą do uczenia: po imporcie sprawdź transkrypcje w WER Monitor i zablokuj zbiór.</span><span class="lang-en">Training corpora require separate activation. Evaluation corpora never enter learning: after import, review transcripts in WER Monitor and freeze the set.</span></p>
+    <p class="info-note"><span class="lang-pl">Polskie audio z aktywnych zbiorów, bez wykluczeń kuratorskich i powiązań z oceną modelu, kwalifikuje się do uczenia. Audio TTS wymaga importu przez kampanię z odpowiednim przeznaczeniem oraz niezależnych limitów SFT/kolejki (domyślnie 0%).</span><span class="lang-en">Polish audio in active corpora without curation or evaluation exclusions qualifies for learning. TTS requires a validated campaign import with permitted use and independent SFT/refill caps (default 0%).</span></p>
+    {% if tab == 'evaluation' %}
+    <h2>WER Monitor</h2>
+    <ul>{% for monitor in evaluation_sets %}
+      <li><a href="/admin/canary?canary_set_id={{ monitor.id }}">{{ monitor.name }}</a> — {{ monitor.verified_count }}/{{ monitor.item_count }} — {{ monitor.status }}{% if monitor.is_promotion_gate %} — <span class="lang-pl">brama promocji</span><span class="lang-en">promotion gate</span>{% endif %}</li>
+    {% else %}<li><span class="lang-pl">Brak zbiorów testowych.</span><span class="lang-en">No evaluation sets.</span></li>{% endfor %}</ul>
+    {% endif %}
+    <div class="health-table-wrap">
+      <table class="health-table">
+        <thead><tr>
+          <th><span class="lang-pl">Zbiór</span><span class="lang-en">Corpus</span></th>
+          <th><span class="lang-pl">Język / źródło</span><span class="lang-en">Language / origin</span></th>
+          <th><span class="lang-pl">Nagrania</span><span class="lang-en">Recordings</span></th>
+          <th><span class="lang-pl">Unikalne teksty</span><span class="lang-en">Unique texts</span></th>
+          <th><span class="lang-pl">Do uczenia teraz</span><span class="lang-en">Learning-eligible now</span></th>
+          <th><span class="lang-pl">Stan</span><span class="lang-en">State</span></th>
+          <th><span class="lang-pl">Akcja</span><span class="lang-en">Action</span></th>
+        </tr></thead>
+        <tbody>
+        {% for corpus in corpora %}
+          <tr{% if selected and selected.id == corpus.id %} class="is-selected"{% endif %}>
+            <td><a href="/admin/corpora?tab={{ tab }}&corpus_id={{ corpus.id }}">{{ corpus.name }}</a><br><code>{{ corpus.id }}</code></td>
+            <td>{{ corpus.language }} / {% if corpus.origin == 'recorded' %}<span class="lang-pl">nagrania</span><span class="lang-en">recorded</span>{% elif corpus.origin == 'synthesized' %}<span class="lang-pl">synteza</span><span class="lang-en">synthesized</span>{% else %}<span class="lang-pl">mieszane</span><span class="lang-en">mixed</span>{% endif %}{% if corpus.provider %}<br>{{ corpus.provider }}{% endif %}</td>
+            <td>{{ corpus.audio_count }}</td><td>{{ corpus.utterance_count }}</td><td>{{ corpus.eligible_count }}</td>
+            <td>{% if corpus.active %}<span class="health-status health-status--healthy"><span class="lang-pl">włączony</span><span class="lang-en">enabled</span></span>{% else %}<span class="health-status health-status--warning"><span class="lang-pl">wyłączony</span><span class="lang-en">disabled</span></span>{% endif %}</td>
+            <td>{% if tab == 'training' %}<form method="POST" action="/admin/corpora/activation" onsubmit="return confirm(t('{{ 'corpora.deactivateConfirm' if corpus.active else 'corpora.activateConfirm' }}'))">
+              <input type="hidden" name="corpus_id" value="{{ corpus.id }}">
+              <input type="hidden" name="active" value="{{ '0' if corpus.active else '1' }}">
+              <button type="submit" class="{{ 'btn-destructive' if corpus.active else 'btn-secondary' }}"><span class="lang-pl">{{ 'Wyłącz' if corpus.active else 'Włącz' }}</span><span class="lang-en">{{ 'Disable' if corpus.active else 'Enable' }}</span></button>
+            </form>{% else %}<span class="lang-pl">Tylko do oceny</span><span class="lang-en">Evaluation only</span>{% endif %}</td>
+          </tr>
+        {% else %}<tr><td colspan="7"><span class="lang-pl">Brak zbiorów w tej kategorii.</span><span class="lang-en">No corpora in this category.</span></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% if selected %}
+  <section class="admin-section">
+    <h2>{{ selected.name }}</h2>
+    <div class="health-table-wrap">
+      <table class="health-table excluded-audio-table">
+        <thead><tr>
+          <th><span class="lang-pl">Nagranie / ścieżka</span><span class="lang-en">Recording / path</span></th>
+          <th><span class="lang-pl">Parametry</span><span class="lang-en">Properties</span></th>
+          <th><span class="lang-pl">Tekst referencyjny</span><span class="lang-en">Reference text</span></th>
+          <th><span class="lang-pl">Do uczenia</span><span class="lang-en">Learning eligibility</span></th>
+          <th><span class="lang-pl">Pochodzenie</span><span class="lang-en">Provenance</span></th>
+        </tr></thead>
+        <tbody>
+        {% for audio in audio_files %}
+          <tr>
+            <td><audio controls preload="none" src="/admin/corpora/audio/{{ audio.id }}"></audio><code>{{ audio.id }}</code><br>{{ audio.file_path }}</td>
+            <td>{% if audio.duration_s is not none %}{{ "%.2f" | format(audio.duration_s) }} s{% else %}&mdash;{% endif %}<br>{% if audio.sample_rate %}{{ audio.sample_rate }} Hz{% else %}&mdash;{% endif %}</td>
+            <td class="excluded-transcript">{{ audio.reference_transcript or "—" }}</td>
+            <td>{% if audio.learning_eligible %}<span class="lang-pl">kwalifikuje się</span><span class="lang-en">eligible</span>{% else %}<span class="lang-pl">nie kwalifikuje się</span><span class="lang-en">ineligible</span>{% endif %}{% if audio.excluded %}<br>{{ audio.exclusion_reason or "" }}{% endif %}</td>
+            <td>{{ audio.provenance_json or "—" }}</td>
+          </tr>
+        {% else %}<tr><td colspan="5"><span class="lang-pl">Brak nagrań w tym zbiorze.</span><span class="lang-en">No recordings in this corpus.</span></td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <nav class="annotation-pagination" aria-label="Pagination">
+      {% if page > 1 %}<a class="btn-secondary" href="/admin/corpora?tab={{ tab }}&corpus_id={{ selected.id }}&page={{ page - 1 }}"><span class="lang-pl">Poprzednia</span><span class="lang-en">Previous</span></a>{% endif %}
+      <span><span class="lang-pl">Strona</span><span class="lang-en">Page</span> {{ page }} / {{ pages }}</span>
+      {% if page < pages %}<a class="btn-secondary" href="/admin/corpora?tab={{ tab }}&corpus_id={{ selected.id }}&page={{ page + 1 }}"><span class="lang-pl">Następna</span><span class="lang-en">Next</span></a>{% endif %}
+    </nav>
+  </section>
+  {% endif %}
+</main>
+</body>
+</html>

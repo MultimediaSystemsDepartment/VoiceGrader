@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAISE-ASR — TTS Augmentation</title>
+  <link rel="stylesheet" href="/static/style.css?v=20261123-tts-review">
+  <script src="/static/i18n.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-title">CAISE-ASR</div>
+    <div class="header-subtitle"><span class="lang-pl">Augmentacja TTS</span><span class="lang-en">TTS Augmentation</span></div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link lang-active">Wersja polska</a>
+      <span class="lang-sep">|</span>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle">{% set admin_nav_active = "tts" %}{% include "_admin_nav.html" %}</div>
+  <div class="header-logos"><img src="/static/logo-caise.svg" alt="CAISE" class="logo-caise"><img src="/static/logo-admedvoice.png" alt="ADMEDVOICE" class="logo-admedvoice"></div>
+</header>
+{% macro state_badge(state) -%}
+  {% set labels = {'pending': ('Oczekuje', 'Pending'), 'submitting': ('Wysyłanie', 'Submitting'), 'accepted': ('Przyjęte', 'Accepted'), 'polling': ('Pobieranie', 'Collecting'), 'review_required': ('Wymaga uwagi', 'Needs attention'), 'failed': ('Błąd', 'Failed'), 'cancelled': ('Anulowane', 'Cancelled'), 'completed': ('Gotowe', 'Completed'), 'queued': ('W kolejce', 'Queued'), 'running': ('Ocena w toku', 'Assessing')} %}
+  {% set label = labels.get(state, (state, state)) %}
+  <span class="tts-status tts-status--{{ state }}"><span class="lang-pl">{{ label[0] }}</span><span class="lang-en">{{ label[1] }}</span></span>
+{%- endmacro %}
+<main class="admin-main tts-main">
+  <section class="admin-section">
+    <h1><span class="lang-pl">Nowa kampania augmentacji TTS</span><span class="lang-en">New TTS Augmentation Campaign</span></h1>
+    <p class="info-note"><span class="lang-pl">Worker CPU aplikacji webowej wysyła zadania do dostawcy i pobiera audio niezależnie od treningu GPU. Każde zadanie to jeden tekst i jeden profil. Istniejące kombinacje są współdzielone bez ponownej syntezy. Wykluczenia WER Monitor dotyczą wszystkich wersji tekstu.</span><span class="lang-en">The CPU web worker submits jobs to the provider and collects audio independently of GPU training. Each job is one text/profile. Existing combinations are reused without resynthesis. WER Monitor exclusions cover every rendition.</span></p>
+    <p class="info-note">{% if local_tts %}<span class="lang-pl">Lokalny moduł TTS: uwierzytelnione API v0.7 i zweryfikowane archiwa ZIP. Profile GPU wymagają uruchomionego silnika, modeli i plików głosu w reference_voices. Stare kampanie zachowują pierwotnego dostawcę.</span><span class="lang-en">Local TTS module: authenticated v0.7 API and verified ZIP archives. GPU profiles require a running engine, models and reference_voices assets. Existing campaigns retain their original provider.</span>{% else %}<span class="lang-pl">Zewnętrzny adapter bieżącego API. Pozostałe profile Arek.wav pozostają niesprawdzone.</span><span class="lang-en">External current-API adapter. Other Arek.wav profiles remain unverified.</span>{% endif %} <code>{{ provider_url }}</code></p>
+    {% if provider_error %}<p class="tts-error" role="alert">{{ provider_error }}</p>{% endif %}
+    {% if local_tts %}<p class="info-note"><span class="lang-pl">Limit lokalnego API: 280 znaków na tekst. Dłuższe teksty są pomijane i liczone w oszacowaniu; nigdy nie są ucinane.</span><span class="lang-en">Local API limit: 280 characters per text. Longer texts are excluded and counted in the estimate; they are never truncated.</span></p>{% endif %}
+    <form id="tts-create" class="tts-create-form" method="POST" action="/admin/tts/create">
+      <label><span class="lang-pl">Aktywny zbiór polski</span><span class="lang-en">Active Polish source</span>
+        <select name="corpus_id" required>{% for c in corpora %}<option value="{{ c.id }}">{{ c.name }} ({{ c.eligible_texts }})</option>{% endfor %}</select>
+      </label>
+      <label><span class="lang-pl">Przeznaczenie</span><span class="lang-en">Intended use</span>
+        <select name="intended_use"><option value="both">SFT + annotation / adnotacja</option><option value="sft">SFT</option><option value="annotation">Annotation / adnotacja</option></select>
+      </label>
+      <label><span class="lang-pl">Wybór tekstów</span><span class="lang-en">Text selection</span>
+        <select name="mode"><option value="count">Nowe teksty / New texts (count)</option><option value="coverage">Łączne pokrycie / Cumulative coverage (%)</option><option value="all">Wszystkie / All</option></select>
+      </label>
+      <label><span class="lang-pl">Liczba / procent</span><span class="lang-en">Count / percentage</span><input name="value" type="number" min="1" value="10" required></label>
+      <fieldset><legend><span class="lang-pl">Silnik / głos</span><span class="lang-en">Engine / voice</span></legend>
+        {% for p in profiles %}<label><input type="checkbox" name="profiles" value="{{ p.id }}" {% if p.id not in available_profiles %}disabled{% elif p.engine == 'piper' %}checked{% endif %}>{{ p.label }}{% if p.id not in available_profiles %} — <span class="lang-pl">silnik lub pliki niedostępne</span><span class="lang-en">engine or assets unavailable</span>{% endif %}</label>{% endfor %}
+      </fieldset>
+      <button type="button" id="tts-preview" class="btn-secondary"><span class="lang-pl">Oszacuj pracę</span><span class="lang-en">Estimate work</span></button>
+      <button type="submit" class="btn-primary"><span class="lang-pl">Zapisz kampanię augmentacji TTS</span><span class="lang-en">Queue TTS Augmentation Campaign</span></button>
+      <output id="tts-estimate" class="tts-full-width" aria-live="polite"></output>
+    </form>
+  </section>
+  <section class="admin-section">
+    <h2><span class="lang-pl">Limity udziału TTS</span><span class="lang-en">TTS participation caps</span></h2>
+    <p class="info-note"><span class="lang-pl">Domyślnie 0%. Niezależne twarde limity, nie cele: brakujących nagrań nie zastępujemy syntezą. Maksymalnie jedna wersja TTS tekstu w epoce SFT. Tekst zadany jest celem SFT, nigdy automatyczną preferencją A/B. Ludzkie etykiety TTS mogą uczyć nagrodę/DPO niezależnie od bieżącego limitu kolejki.</span><span class="lang-en">Default 0%. Independent hard caps, not targets: missing recorded data is never replaced silently. At most one TTS rendition per utterance per SFT epoch. Requested text is an SFT target, never an automatic A/B label. Eligible human TTS feedback can train reward/DPO independently of the current refill cap.</span></p>
+    <form class="tts-cap-form" method="POST" action="/admin/tts/shares">
+      <label>SFT % <input name="sft_share" type="number" min="0" max="100" step="0.1" value="{{ sft_share }}" required></label>
+      <label><span class="lang-pl">Kolejka %</span><span class="lang-en">Refill %</span><input name="refill_share" type="number" min="0" max="100" step="0.1" value="{{ refill_share }}" required></label>
+      <button class="btn-secondary"><span class="lang-pl">Zapisz limity</span><span class="lang-en">Save caps</span></button>
+    </form>
+    <details><summary><span class="lang-pl">Ostatni skład kolejki</span><span class="lang-en">Latest selected refill composition</span></summary><pre>{{ composition }}</pre></details>
+  </section>
+  <section class="admin-section">
+    <h2><span class="lang-pl">Kampanie augmentacji TTS i postęp</span><span class="lang-en">TTS Augmentation Campaigns and progress</span></h2>
+    <p class="info-note"><span class="lang-pl">Anulowanie dotyczy tylko lokalnych niewysłanych zadań. Nie anulujemy syntezy u dostawcy; przyjęte zadania zbieramy dalej. Ukończone audio i historia pozostają.</span><span class="lang-en">Cancellation affects local unsubmitted work only, not remote synthesis. Accepted jobs are still collected; imported audio and history remain.</span></p>
+    <div class="health-table-wrap"><table class="health-table"><thead><tr><th>ID / source</th><th>Use / selection</th><th>Status / progress</th><th></th></tr></thead><tbody>
+      {% for c in campaigns %}<tr>
+        <td><a href="/admin/tts?campaign_id={{ c.id }}">{{ c.id }}</a><br>{{ c.source_name }}</td>
+        <td>{{ c.intended_use }} / {{ c.selection_mode }} {{ c.selection_value }}</td>
+        <td>{{ c.status }}<br>{% for state, count in c.counts.items() %}{{ state }}: {{ count }}<br>{% endfor %}</td>
+        <td>{% if c.status == 'active' %}<form method="POST" action="/admin/tts/cancel"><input type="hidden" name="campaign_id" value="{{ c.id }}"><button class="btn-destructive"><span class="lang-pl">Anuluj niewysłane</span><span class="lang-en">Cancel unsubmitted</span></button></form>{% endif %}</td>
+      </tr>{% else %}<tr><td colspan="4">—</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  {% if selected %}
+  <section class="admin-section tts-items-section">
+    <h2><span class="lang-pl">Nagrania kampanii augmentacji TTS</span><span class="lang-en">TTS Augmentation Campaign recordings</span> — {{ selected.source_name }}</h2>
+    <p class="tts-meta">{{ selected.id }}</p>
+    <p class="info-note"><span class="lang-pl">Ocena jakości na żądanie używa SNR i WhiSQA w lokalnym ASR. ASR musi działać w bezpiecznym oknie GPU. Wyniki są wyłącznie informacyjne: nie odrzucają nagrań ani nie zmieniają limitów uczenia. MOS nie potwierdza poprawności tekstu. Błąd wymaga jawnego ponowienia.</span><span class="lang-en">On-demand quality assessment uses the local ASR SNR and WhiSQA workers. ASR must be available in a safe GPU window. Scores are report-only: no recording is rejected and learning caps are unchanged. MOS does not establish transcript accuracy. Failed assessments require explicit retry.</span></p>
+    <p class="info-note"><span class="lang-pl">„Ponów pobieranie” używa istniejącego zadania bez nowej syntezy. „Wyślij nową syntezę” może utworzyć duplikat — ostrzeżenie pojawia się po najechaniu lub ustawieniu fokusu na przycisku.</span><span class="lang-en">“Retry collection” reuses the existing job without new synthesis. “Submit new synthesis” may create a duplicate — hover or focus the button for details.</span></p>
+    <div class="tts-item-list">
+      {% for item in items %}
+      <article class="tts-item" data-item-id="{{ item.id }}">
+        <div class="tts-recording">
+          <div class="tts-item-heading"><h3>{{ profile_labels.get(item.profile_id, item.profile_id) }}</h3>{{ state_badge(item.state) }}</div>
+          <p class="tts-transcript">{{ item.text }}</p>
+          {% if item.audio_id %}<audio controls preload="none" src="/admin/corpora/audio/{{ item.audio_id }}"></audio>{% endif %}
+          {% if item.error %}<p class="tts-error" role="alert">{{ item.error }}</p>{% endif %}
+          {% if item.state in ['review_required','failed','cancelled'] %}
+          <div class="tts-actions">
+            {% if item.job_id %}
+            <form method="POST" action="/admin/tts/review">
+              <input type="hidden" name="item_id" value="{{ item.id }}"><input type="hidden" name="campaign_id" value="{{ selected.id }}">
+              <input type="hidden" name="job_id" value="{{ item.job_id }}">
+              <button name="action" value="attach_job" class="btn-secondary"><span class="lang-pl">Ponów pobieranie</span><span class="lang-en">Retry collection</span></button>
+            </form>
+            {% endif %}
+            <form method="POST" action="/admin/tts/review" class="tts-risk-action">
+              <input type="hidden" name="item_id" value="{{ item.id }}"><input type="hidden" name="campaign_id" value="{{ selected.id }}">
+              <input type="hidden" name="confirm_duplicate" value="1">
+              <button name="action" value="retry" class="btn-destructive" aria-describedby="duplicate-warning-{{ item.id }}"><span class="lang-pl">Wyślij nową syntezę</span><span class="lang-en">Submit new synthesis</span></button>
+              <span class="tts-tooltip" role="tooltip" id="duplicate-warning-{{ item.id }}"><span class="lang-pl">Kliknięcie zleca nową syntezę i akceptuje ryzyko duplikatu oraz dodatkowych kosztów. Przy niepewnym wyniku sprawdź najpierw zadanie u dostawcy. Aby tylko ponownie pobrać wynik, użyj „Ponów pobieranie”.</span><span class="lang-en">Clicking requests new synthesis and accepts the risk of duplicate work and extra cost. For uncertain outcomes, check the provider first. To fetch an existing result again, use “Retry collection”.</span></span>
+            </form>
+            <form method="POST" action="/admin/tts/review">
+              <input type="hidden" name="item_id" value="{{ item.id }}"><input type="hidden" name="campaign_id" value="{{ selected.id }}">
+              <button name="action" value="cancel" class="btn-secondary"><span class="lang-pl">Anuluj lokalnie</span><span class="lang-en">Cancel locally</span></button>
+            </form>
+          </div>
+          <details class="tts-details"><summary><span class="lang-pl">Podepnij inne ID zadania</span><span class="lang-en">Attach another job ID</span></summary>
+            <form class="tts-attach-form" method="POST" action="/admin/tts/review">
+              <input type="hidden" name="item_id" value="{{ item.id }}"><input type="hidden" name="campaign_id" value="{{ selected.id }}">
+              <label>Job ID <input name="job_id" maxlength="200" required></label>
+              <button name="action" value="attach_job" class="btn-secondary"><span class="lang-pl">Podepnij ID</span><span class="lang-en">Attach job ID</span></button>
+            </form>
+          </details>
+          {% endif %}
+          <details class="tts-details"><summary><span class="lang-pl">Dane techniczne i historia</span><span class="lang-en">Technical details and history</span></summary>
+            <dl class="tts-identifiers"><dt>Item ID</dt><dd>{{ item.id }}</dd><dt>Profile ID</dt><dd>{{ item.profile_id }}</dd><dt>Job ID</dt><dd>{{ item.job_id or '—' }}</dd><dt>GET attempts</dt><dd>{{ item.attempts }}</dd></dl>
+            <pre>{{ item.review_log_json }}</pre>
+          </details>
+        </div>
+        {% if item.audio_id %}
+        <aside class="tts-quality" aria-label="Quality / Jakość">
+          <div class="tts-item-heading"><h3><span class="lang-pl">Jakość nagrania</span><span class="lang-en">Recording quality</span></h3>
+          {% set score = quality.get(item.audio_id) %}
+          {% if score %}{{ state_badge(score.state) }}{% endif %}
+          </div>
+          {% if score %}
+            {% if score.error %}<p class="tts-error" role="alert">{{ score.error }}</p>{% endif %}
+            {% if score.metrics %}
+            <dl class="tts-score-grid">
+              {% for key, pl, en in [('mos', 'MOS', 'MOS'), ('noisiness', 'Brak szumu', 'Noisiness'), ('discontinuity', 'Ciągłość', 'Continuity'), ('coloration', 'Barwa', 'Coloration'), ('loudness', 'Głośność', 'Loudness')] %}
+              {% set value = score.metrics.get('qual', {}).get(key) %}
+              <div{% if key == 'mos' %} class="tts-score-primary"{% endif %}><dt><span class="lang-pl">{{ pl }}</span><span class="lang-en">{{ en }}</span></dt><dd>{{ '%.2f'|format(value) if value is not none else '—' }}<small> / 5</small></dd></div>
+              {% endfor %}
+            </dl>
+            <details class="tts-details"><summary><span class="lang-pl">Statystyki mowy i szumu</span><span class="lang-en">Speech and noise statistics</span></summary>
+              <dl class="tts-noise-grid">
+                {% for key, pl, en, unit in [('snr', 'SNR', 'SNR', 'dB'), ('peak_snr', 'Szczytowy SNR', 'Peak SNR', 'dB'), ('level_speech', 'Poziom mowy', 'Speech level', 'dB'), ('level_noise', 'Poziom szumu', 'Noise level', 'dB'), ('perc_speech', 'Udział mowy', 'Speech share', '%'), ('perc_noise', 'Udział szumu', 'Noise share', '%')] %}
+                {% set value = score.metrics.get('snr', {}).get(key) %}
+                <div><dt><span class="lang-pl">{{ pl }}</span><span class="lang-en">{{ en }}</span></dt><dd>{% if value is not none %}{{ '%.1f'|format(value * 100 if unit == '%' else value) }} {{ unit }}{% else %}<span class="lang-pl">Brak danych</span><span class="lang-en">Unavailable</span>{% endif %}</dd></div>
+                {% endfor %}
+              </dl>
+            </details>
+            <details class="tts-details"><summary><span class="lang-pl">Surowe wyniki i profil</span><span class="lang-en">Raw results and profile</span></summary><p class="tts-meta">{{ score.profile }}</p><pre>{{ score.metrics_json }}</pre></details>
+            {% endif %}
+            {% if score.reviewed_at %}<p class="tts-reviewed"><span class="lang-pl">Sprawdzone</span><span class="lang-en">Reviewed</span> · {{ score.reviewed_at }}</p>{% endif %}
+            {% if score.notes %}<p class="tts-notes">{{ score.notes }}</p>{% endif %}
+            {% if score.state == 'completed' and not score.reviewed_at %}
+            <form class="tts-review-form" method="POST" action="/admin/tts/quality">
+              <input type="hidden" name="action" value="review"><input type="hidden" name="review_id" value="{{ score.id }}"><input type="hidden" name="campaign_id" value="{{ selected.id }}">
+              <label><span class="lang-pl">Notatki jakości (opcjonalne)</span><span class="lang-en">Quality notes (optional)</span><textarea name="notes" maxlength="2000" rows="2"></textarea></label>
+              <button class="btn-secondary"><span class="lang-pl">Oznacz jako sprawdzone</span><span class="lang-en">Mark reviewed</span></button>
+            </form>
+            {% endif %}
+          {% else %}<p class="info-note"><span class="lang-pl">Posłuchaj nagrania i uruchom ocenę jakości.</span><span class="lang-en">Listen to the recording and request a quality assessment.</span></p>{% endif %}
+          {% if not score or score.state in ['completed','failed'] %}
+          <form class="tts-assess-form" method="POST" action="/admin/tts/quality">
+            <input type="hidden" name="action" value="assess"><input type="hidden" name="audio_id" value="{{ item.audio_id }}"><input type="hidden" name="campaign_id" value="{{ selected.id }}">
+            <button class="btn-secondary">{% if score %}<span class="lang-pl">Przelicz jakość</span><span class="lang-en">Reassess quality</span>{% else %}<span class="lang-pl">Oceń jakość</span><span class="lang-en">Assess quality</span>{% endif %}</button>
+          </form>
+          {% endif %}
+        </aside>
+        {% endif %}
+      </article>
+      {% else %}<p class="info-note"><span class="lang-pl">Brak nagrań na tej stronie.</span><span class="lang-en">No recordings on this page.</span></p>{% endfor %}
+    </div>
+    <nav class="annotation-pagination">
+      {% if page > 1 %}<a href="/admin/tts?campaign_id={{ selected.id }}&page={{ page - 1 }}">←</a>{% endif %}
+      {{ page }}
+      {% if items|length == 25 %}<a href="/admin/tts?campaign_id={{ selected.id }}&page={{ page + 1 }}">→</a>{% endif %}
+    </nav>
+  </section>
+  {% endif %}
+</main>
+<script>
+document.getElementById('tts-preview').addEventListener('click', async () => {
+  const output = document.getElementById('tts-estimate');
+  const data = new FormData(document.getElementById('tts-create'));
+  data.set('action', 'preview');
+  try {
+    const response = await fetch('/admin/tts/create', {method: 'POST', body: data});
+    const result = await response.json();
+    output.textContent = response.ok
+      ? `Eligible / kwalifikowane: ${result.eligible_utterances}; selected / wybrane: ${result.selected_utterances}; combinations / kombinacje: ${result.combinations}; new jobs / nowe zadania: ${result.missing}; over text limit / za długie: ${result.excluded_texts_over_limit}`
+      : result.detail;
+  } catch (error) { output.textContent = 'Preview failed / Błąd oszacowania'; }
+});
+</script>
+</body>
+</html>

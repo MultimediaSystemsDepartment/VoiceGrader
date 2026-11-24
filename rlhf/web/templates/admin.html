@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAISE-ASR &mdash; Admin</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260802-1">
+  <script src="/static/i18n.js"></script>
+  <meta http-equiv="refresh" content="30">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-title">CAISE-ASR</div>
+    <div class="header-subtitle">
+      <span class="lang-pl">Panel administracyjny</span>
+      <span class="lang-en">Administration Panel</span>
+    </div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link lang-active">Wersja polska</a>
+      <span class="lang-sep">|</span>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle">
+    <span class="stats-bar" id="auto-refresh-note">
+      <span class="lang-pl">Odświeżanie co 30 s</span>
+      <span class="lang-en">Auto-refreshes every 30 s</span>
+    </span>
+    {% set admin_nav_active = "admin" %}
+    {% include "_admin_nav.html" %}
+  </div>
+  <div class="header-logos">
+    <img src="/static/logo-caise.svg" alt="CAISE" class="logo-caise">
+    <img src="/static/logo-admedvoice.png" alt="ADMEDVOICE" class="logo-admedvoice">
+  </div>
+</header>
+
+<main class="admin-main">
+  <section class="admin-section">
+    <h2><span class="lang-pl">Publikacja ASR</span><span class="lang-en">ASR publication</span></h2>
+    <p><strong>{{ settings.asr_publication_status }}</strong> <code>{{ settings.asr_publication_id }}</code></p>
+    <p class="info-note">{{ settings.asr_publication_log }}</p>
+    <p class="info-note"><span class="lang-pl">Konwersję i weryfikację wykonuje osobny worker po zatwierdzeniu modelu. Błąd publikacji nie zmienia aktywnej polityki. Ponowną próbę wykonuje operator: </span><span class="lang-en">A separate worker converts and validates gate-approved models. Publication failure never changes the active policy. An operator can retry with: </span><code>python run_publish_model.py --if-ready</code></p>
+  </section>
+
+  <!-- ===== Live stats ===== -->
+  <section class="admin-section">
+    <h2>
+      <span class="lang-pl">Statystyki</span>
+      <span class="lang-en">Live Stats</span>
+    </h2>
+    <div class="admin-stats-grid">
+      <div class="stat-box stat-box--policy">
+        <div class="stat-value stat-value--checkpoint">{{ active_policy.name if active_policy else "base / unknown" }}</div>
+        <div class="stat-label">
+          <span class="lang-pl">Aktywny model</span>
+          <span class="lang-en">Active policy</span>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">{{ active_sessions | length }}</div>
+        <div class="stat-label">
+          <span class="lang-pl">Aktywni adnotatorzy</span>
+          <span class="lang-en">Active annotators</span>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">{{ stats.human_annotations }}</div>
+        <div class="stat-label">
+          <span class="lang-pl">Adnotacje ręczne</span>
+          <span class="lang-en">Human annotations</span>
+        </div>
+      </div>
+      <div class="stat-box{% if new_actionable >= settings.training_threshold | int %} stat-box--active{% endif %}">
+        <div class="stat-value">{{ new_actionable }} / {{ settings.training_threshold }}</div>
+        <div class="stat-label">
+          <span class="lang-pl">Postęp do automatycznego treningu</span>
+          <span class="lang-en">Auto-training progress</span>
+        </div>
+        <div class="stat-hint">
+          <span class="lang-pl">Pozostało: {{ training_remaining }} &middot; {{ stats.actionable_annotations }} łącznie</span>
+          <span class="lang-en">{{ training_remaining }} remaining &middot; {{ stats.actionable_annotations }} total</span>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">{{ stats.annotated_pairs }}</div>
+        <div class="stat-label">
+          <span class="lang-pl">Ocenione pary</span>
+          <span class="lang-en">Annotated pairs</span>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">{{ stats.audio_files }}</div>
+        <div class="stat-label">
+          <span class="lang-pl">Pliki audio</span>
+          <span class="lang-en">Audio files</span>
+        </div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">{{ stats.training_runs }}</div>
+        <div class="stat-label">
+          <span class="lang-pl">Uruchomienia treningu</span>
+          <span class="lang-en">Training runs</span>
+        </div>
+      </div>
+      <div class="stat-box{% if settings.queue_refill_status == 'running' %} stat-box--active{% elif settings.queue_refill_status == 'failed' %} stat-box--warn{% endif %}">
+        <div class="stat-value">{{ stats.pending_pairs }}</div>
+        <div class="stat-label">
+          <span class="lang-pl">Pary w kolejce / minimum</span>
+          <span class="lang-en">In queue / threshold</span>
+          {% if settings.queue_min_size != '0' %}
+          &nbsp;<span class="queue-threshold-chip">min&nbsp;{{ settings.queue_min_size }}</span>
+          {% endif %}
+        </div>
+        {% if settings.queue_refill_status == 'running' %}
+        <div class="stat-hint stat-hint--active">
+          <span class="lang-pl">Uzupełnianie&hellip;</span>
+          <span class="lang-en">Refilling&hellip;</span>
+        </div>
+        {% elif settings.queue_refill_status == 'failed' %}
+        <div class="stat-hint stat-hint--warn">
+          <span class="lang-pl">Błąd uzupełniania</span>
+          <span class="lang-en">Refill failed</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Queue auto-refill ===== -->
+  <section class="admin-section">
+    <h2>
+      <span class="lang-pl">Automatyczne uzupełnianie kolejki</span>
+      <span class="lang-en">Queue Auto-Refill</span>
+    </h2>
+
+    <div class="training-badge training-badge--{{ settings.queue_refill_status }}">
+      <span class="lang-pl">Stan:&nbsp;<strong>{% if settings.queue_refill_status == 'idle' %}nieaktywny{% elif settings.queue_refill_status == 'queued' %}oczekuje{% elif settings.queue_refill_status == 'running' %}w toku{% elif settings.queue_refill_status == 'failed' %}błąd{% else %}{{ settings.queue_refill_status }}{% endif %}</strong></span>
+      <span class="lang-en">Status:&nbsp;<strong>{{ settings.queue_refill_status }}</strong></span>
+    </div>
+    {% if request.query_params.get("refill_error") %}
+    <p class="error-msg">{{ request.query_params.get("refill_error") }}</p>
+    {% endif %}
+    {% if settings.queue_refill_status == 'queued' %}
+    <p class="info-note"><span class="lang-pl">Żądanie czeka na wykonanie przez worker GPU. Usługa training musi działać; bez nagrań w katalogu kolejka nie zostanie wygenerowana.</span><span class="lang-en">The request is waiting for the GPU worker. The training service must be running; an empty audio catalogue cannot produce pairs.</span></p>
+    {% endif %}
+
+    {% if settings.queue_refill_log %}
+    <p class="step-log-line" style="margin-top:0.5rem">{{ settings.queue_refill_log }}</p>
+    {% endif %}
+
+    <div class="admin-row" style="margin-top:1rem;gap:0.75rem;display:flex;flex-wrap:wrap;align-items:center">
+      {% if settings.queue_refill_status == 'running' %}
+        <p class="info-note">
+          <span class="lang-pl">Uzupełnianie w toku. Adnotowanie pozostaje dostępne.</span>
+          <span class="lang-en">Refill in progress. Annotation continues uninterrupted.</span>
+        </p>
+      {% else %}
+        <form method="POST" action="/admin/trigger_refill">
+          <button type="submit" class="btn-secondary"
+                  {% if settings.training_status == 'running' or settings.queue_refill_status == 'queued' %}disabled{% endif %}>
+            <span class="lang-pl">Uzupełnij kolejkę teraz</span>
+            <span class="lang-en">Refill Queue Now</span>
+          </button>
+        </form>
+      {% endif %}
+    </div>
+
+    <p class="info-note" style="margin-top:0.9rem">
+      <span class="lang-pl">
+        Kolejka jest automatycznie uzupełniana w tle, gdy liczba oczekujących par spadnie poniżej
+        <strong>{{ settings.queue_min_size }}</strong>.
+        Ustawienie <strong>0</strong> wyłącza tę funkcję.
+        Trening ma priorytet &mdash; uzupełnianie jest wstrzymywane na jego czas i wznawiane
+        po opublikowaniu nowej wersji modelu.
+      </span>
+      <span class="lang-en">
+        The queue is automatically refilled in the background when pending pairs drop below
+        <strong>{{ settings.queue_min_size }}</strong>.
+        Setting the threshold to <strong>0</strong> disables this feature.
+        Training takes priority &mdash; refill pauses while it runs and resumes after the new
+        policy is published.
+      </span>
+    </p>
+  </section>
+
+  <!-- ===== Training control ===== -->
+  <section class="admin-section">
+    <h2>
+      <span class="lang-pl">Trening modelu</span>
+      <span class="lang-en">Training</span>
+    </h2>
+
+    <div class="training-badge training-badge--{{ settings.training_status }}">
+      <span class="lang-pl">Stan:&nbsp;<strong>{% if settings.training_status == 'idle' %}nieaktywny{% elif settings.training_status == 'running' %}w toku{% elif settings.training_status == 'guarded' %}bramka aktywowana{% elif settings.training_status == 'failed' %}błąd{% else %}{{ settings.training_status }}{% endif %}</strong></span>
+      <span class="lang-en">Status:&nbsp;<strong>{% if settings.training_status == 'guarded' %}gate activated{% else %}{{ settings.training_status }}{% endif %}</strong></span>
+      {% if settings.training_requested == 'true' and settings.training_status != 'running' %}
+        &nbsp;&mdash;
+        <span class="lang-pl">oczekuje na uruchomienie</span>
+        <span class="lang-en">run queued, waiting for coordinator</span>
+      {% endif %}
+    </div>
+
+    {# ---- Pipeline step progress (shown while running or after a terminal result) ---- #}
+    {% if settings.training_status in ('running', 'guarded', 'failed') and settings.training_step %}
+    {% set all_steps = pipeline_steps %}
+    {% set cur_n   = settings.training_step_n %}
+    {% set total_n = settings.training_step_total %}
+    <div class="pipeline-progress">
+      <div class="progress-track">
+        <div class="progress-fill{% if settings.training_status == 'failed' %} progress-fill--failed{% endif %}"
+             style="width: {{ settings.training_step_pct }}%"></div>
+      </div>
+      <ul class="step-list">
+        {% for step in all_steps %}
+          {% set n = loop.index %}
+          {% if n < cur_n %}
+            <li class="step-item step-item--done">
+              <span class="step-icon">✓</span>
+              <span class="step-label">
+                <span class="lang-pl">{{ step.pl }}</span>
+                <span class="lang-en">{{ step.en }}</span>
+              </span>
+            </li>
+          {% elif n == cur_n %}
+            {% if settings.training_status == 'failed' %}
+            <li class="step-item step-item--failed">
+              <span class="step-icon">✗</span>
+              <span class="step-label">
+                <span class="lang-pl">{{ step.pl }} &mdash; błąd</span>
+                <span class="lang-en">{{ step.en }} &mdash; failed</span>
+              </span>
+            </li>
+            {% elif settings.training_status == 'guarded' %}
+            <li class="step-item step-item--guarded">
+              <span class="step-icon">!</span>
+              <span class="step-label">
+                <span class="lang-pl">{{ step.pl }} &mdash; bramka aktywowana</span>
+                <span class="lang-en">{{ step.en }} &mdash; gate activated</span>
+              </span>
+            </li>
+            {% else %}
+            <li class="step-item step-item--active">
+              <span class="step-icon"><span class="step-spinner">↻</span></span>
+              <span class="step-label">
+                <span class="lang-pl">{{ step.pl }}</span>
+                <span class="lang-en">{{ step.en }}</span>
+              </span>
+            </li>
+            <li style="list-style:none;padding:0 0 0.2rem 2.1rem">
+              <div class="step-bar-track"><div class="step-bar-indeterminate"></div></div>
+              {% if settings.training_step_log %}
+              <div class="step-log-line">{{ settings.training_step_log }}</div>
+              {% endif %}
+            </li>
+            {% endif %}
+          {% else %}
+            <li class="step-item step-item--pending">
+              <span class="step-icon">○</span>
+              <span class="step-label">
+                <span class="lang-pl">{{ step.pl }}</span>
+                <span class="lang-en">{{ step.en }}</span>
+              </span>
+            </li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+      <p class="step-current-label">
+        <span class="lang-pl">Krok {{ cur_n }} / {{ total_n }}</span>
+        <span class="lang-en">Step {{ cur_n }} / {{ total_n }}</span>
+      </p>
+    </div>
+    {% endif %}
+
+    {% if settings.training_status == 'failed' and settings.training_error %}
+    <details class="error-details" open>
+      <summary class="error-summary">&#9888;
+        <span class="lang-pl">Szczegóły błędu</span>
+        <span class="lang-en">Error details</span>
+      </summary>
+      <pre class="error-pre">{{ settings.training_error }}</pre>
+    </details>
+    {% endif %}
+
+    <div class="admin-row" style="margin-top:1rem;gap:0.75rem;display:flex;flex-wrap:wrap;align-items:center">
+      {% if settings.training_status == 'running' %}
+        <p class="info-note">
+          <span class="lang-pl">Trening w toku. Można kontynuować adnotowanie.</span>
+          <span class="lang-en">Training is in progress. Annotation continues uninterrupted.</span>
+        </p>
+      {% elif settings.training_requested == 'true' %}
+        <form method="POST" action="/admin/cancel_training">
+          <button type="submit" class="btn-secondary">
+            <span class="lang-pl">Anuluj oczekujący trening</span>
+            <span class="lang-en">Cancel Queued Run</span>
+          </button>
+        </form>
+      {% else %}
+        <form method="POST" action="/admin/trigger_training">
+          <button type="submit" class="btn-trigger">
+            <span class="lang-pl">Uruchom trening</span>
+            <span class="lang-en">Trigger Training Now</span>
+          </button>
+        </form>
+      {% endif %}
+    </div>
+
+    <p class="info-note" style="margin-top:0.9rem">
+      <span class="lang-pl">
+        Trening uruchamia się automatycznie po zebraniu &ge;&nbsp;<strong>{{ settings.training_threshold }}</strong>
+        nowych <em>rozstrzygających</em> adnotacji (wybór A/B) od ostatniej próby treningu.
+        Koordynator monitoruje tę wartość w tle i uruchamia pełny potok
+        (trening modelu nagrody &rarr; opcjonalne SFT &rarr; generowanie danych DPO &rarr; DPO z ewaluacją).
+        <br><em>Adnotowanie pozostaje dostępne w trakcie treningu.</em>
+      </span>
+      <span class="lang-en">
+        Auto-training fires when &ge;&nbsp;<strong>{{ settings.training_threshold }}</strong>
+        new <em>actionable</em> (a/b preference) annotations accumulate since the last training attempt.
+        The coordinator service monitors this in the background and runs the full pipeline
+        (train reward &rarr; score pairs &rarr; optional SFT &rarr; DPO with evaluation).
+        <br><em>Annotation remains fully available during training.</em>
+      </span>
+    </p>
+    {% if inline_coordinator %}
+    <p class="info-note" style="margin-top:0.5rem;color:#2563eb">
+      <strong>
+        <span class="lang-pl">Aktywny koordynator wbudowany</span>
+        <span class="lang-en">Inline coordinator active</span>
+      </strong>
+      (INLINE_COORDINATOR=1) &mdash;
+      <span class="lang-pl">trening jest obsługiwany bezpośrednio przez ten proces. Osobny serwis koordynatora nie jest potrzebny.</span>
+      <span class="lang-en">training runs are handled directly by this web process. No separate coordinator service is needed.</span>
+    </p>
+    {% else %}
+    <p class="info-note" style="margin-top:0.5rem">
+      <strong>
+        <span class="lang-pl">Tryb zewnętrznego koordynatora</span>
+        <span class="lang-en">External coordinator mode</span>
+      </strong>
+      &mdash;
+      <span class="lang-pl">serwis Docker <code>coordinator</code> (lub <code>py scripts/coordinator.py</code>) musi działać, aby trening się uruchomił. Ustaw <code>INLINE_COORDINATOR=1</code>, aby uruchomić bez osobnego procesu koordynatora.</span>
+      <span class="lang-en">the <code>coordinator</code> Docker service (or <code>py scripts/coordinator.py</code>) must be running for triggered training to execute. Set <code>INLINE_COORDINATOR=1</code> to run without a separate coordinator process.</span>
+    </p>
+    {% endif %}
+  </section>
+
+  {% if training_diagnostics.sft or training_diagnostics.synthetic or training_diagnostics.dpo %}
+  <section class="admin-section">
+    <h2><span class="lang-pl">Diagnostyka ostatniego treningu</span><span class="lang-en">Latest training diagnostics</span></h2>
+    <div class="training-diagnostics-wrap">
+      <table class="training-diagnostics">
+        <thead><tr><th>Stage</th><th>Data</th><th>Updates</th><th>Epochs</th><th>Loss</th><th>Gradient norm</th><th>Details</th></tr></thead>
+        <tbody>
+          {% if training_diagnostics.sft %}
+          {% set diagnostic = training_diagnostics.sft %}
+          <tr>
+            <td>SFT</td><td>&mdash;</td>
+            <td>{{ diagnostic.optimizer_updates }} / {{ diagnostic.planned_optimizer_updates }}</td>
+            <td>{{ diagnostic.completed_epochs }}</td>
+            <td>{{ "%.4f" | format(diagnostic.mean_loss) }}</td>
+            <td>{{ "%.3f" | format(diagnostic.mean_gradient_norm) }}</td>
+            <td>warmup {{ diagnostic.effective_warmup_steps }}{% if diagnostic.early_stopped %} &middot; early stopped{% endif %}</td>
+          </tr>
+          {% endif %}
+          {% if training_diagnostics.synthetic %}
+          {% set diagnostic = training_diagnostics.synthetic %}
+          <tr>
+            <td>Synthetic</td>
+            <td>{{ diagnostic.generated_pairs }} generated from {{ diagnostic.pool_size }}</td>
+            <td>&mdash;</td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td>
+            <td>mean margin {{ "%.3f" | format(diagnostic.mean_reward_margin) }} &middot; pool {{ diagnostic.pool_multiplier }}&times;</td>
+          </tr>
+          {% endif %}
+          {% if training_diagnostics.dpo %}
+          {% set diagnostic = training_diagnostics.dpo %}
+          <tr>
+            <td>DPO</td>
+            <td>{{ diagnostic.human_pairs }} human + {{ diagnostic.synthetic_pairs }} synthetic</td>
+            <td>{{ diagnostic.optimizer_updates }} / {{ diagnostic.planned_optimizer_updates }}</td>
+            <td>{{ diagnostic.completed_epochs }}</td>
+            <td>{{ "%.4f" | format(diagnostic.mean_loss) }}</td>
+            <td>{{ "%.3f" | format(diagnostic.mean_gradient_norm) }}</td>
+            <td>log-ratio {{ "%.3f" | format(diagnostic.mean_log_ratio) }}{% if diagnostic.mean_synthetic_reward_margin is not none %} &middot; synthetic margin {{ "%.3f" | format(diagnostic.mean_synthetic_reward_margin) }}{% endif %}{% if diagnostic.early_stopped %} &middot; early stopped{% endif %}</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- ===== Settings ===== -->
+  <section class="admin-section">
+    <h2>
+      <span class="lang-pl">Ustawienia</span>
+      <span class="lang-en">Settings</span>
+    </h2>
+    <form method="POST" action="/admin/settings" class="admin-form">
+      <div class="form-field">
+        <label for="max_concurrent_sessions">
+          <span class="lang-pl">Maks. liczba jednoczesnych adnotatorów</span>
+          <span class="lang-en">Max concurrent annotators</span>
+        </label>
+        <input type="number" id="max_concurrent_sessions" name="max_concurrent_sessions"
+               value="{{ settings.max_concurrent_sessions }}" min="1" max="200" required>
+        <span class="field-hint">
+          <span class="lang-pl">Nowe sesje są odrzucane po osiągnięciu tego limitu.</span>
+          <span class="lang-en">New sessions are rejected when this limit is reached.</span>
+        </span>
+      </div>
+      <div class="form-field">
+        <label for="training_threshold">
+          <span class="lang-pl">Próg auto-treningu (adnotacje)</span>
+          <span class="lang-en">Auto-training threshold (annotations)</span>
+        </label>
+        <input type="number" id="training_threshold" name="training_threshold"
+               value="{{ settings.training_threshold }}" min="1" required>
+        <span class="field-hint">
+          <span class="lang-pl">Koordynator uruchamia trening po tylu nowych rozstrzygających adnotacjach od ostatniego udanego treningu.</span>
+          <span class="lang-en">Coordinator triggers training after this many new human annotations since the last run.</span>
+        </span>
+      </div>
+      <div class="form-field">
+        <label for="queue_min_size">
+          <span class="lang-pl">Min. par w kolejce (auto-uzupełnianie)</span>
+          <span class="lang-en">Min. queue size (auto-refill)</span>
+        </label>
+        <input type="number" id="queue_min_size" name="queue_min_size"
+               value="{{ settings.queue_min_size }}" min="0" required>
+        <span class="field-hint">
+          <span class="lang-pl">Kolejka jest uzupełniana, gdy liczba par spada poniżej tej wartości. <strong>0</strong> = wyłączone.</span>
+          <span class="lang-en">Queue is refilled when it drops below this number. <strong>0</strong> = disabled.</span>
+        </span>
+      </div>
+      <div class="form-field">
+        <label for="queue_refill_batch">
+          <span class="lang-pl">Liczba par na jedno uzupełnienie</span>
+          <span class="lang-en">Refill batch size (pairs per run)</span>
+        </label>
+        <input type="number" id="queue_refill_batch" name="queue_refill_batch"
+               value="{{ settings.queue_refill_batch }}" min="1" required>
+        <span class="field-hint">
+          <span class="lang-pl">Liczba nowych par generowanych przy każdym uzupełnieniu kolejki.</span>
+          <span class="lang-en">Number of new pairs generated each time the queue is auto-refilled.</span>
+        </span>
+      </div>
+      <fieldset class="form-field form-fieldset">
+        <legend>
+          <span class="lang-pl">Dostrajanie zbieżności (następny trening)</span>
+          <span class="lang-en">Convergence tuning (next training run)</span>
+        </legend>
+        <div class="tuning-grid">
+          <div class="form-field">
+            <label for="training_sft_epochs">SFT epochs</label>
+            <input type="number" id="training_sft_epochs" name="training_sft_epochs"
+                   value="{{ settings.training_sft_epochs }}" min="1" max="20" step="1" required>
+          </div>
+          <div class="form-field">
+            <label for="training_sft_learning_rate">SFT learning rate</label>
+            <input type="number" id="training_sft_learning_rate" name="training_sft_learning_rate"
+                   value="{{ settings.training_sft_learning_rate }}" min="0.0000001" max="0.0005" step="any" required>
+          </div>
+          <div class="form-field">
+            <label for="training_sft_warmup_steps">
+              <span class="lang-pl">Limit warmup SFT</span><span class="lang-en">SFT warmup cap</span>
+            </label>
+            <input type="number" id="training_sft_warmup_steps" name="training_sft_warmup_steps"
+                   value="{{ settings.training_sft_warmup_steps }}" min="0" max="100" step="1" required>
+          </div>
+          <div class="form-field">
+            <label for="training_dpo_epochs">DPO epochs</label>
+            <input type="number" id="training_dpo_epochs" name="training_dpo_epochs"
+                   value="{{ settings.training_dpo_epochs }}" min="1" max="10" step="1" required>
+          </div>
+          <div class="form-field">
+            <label for="training_dpo_learning_rate">DPO learning rate</label>
+            <input type="number" id="training_dpo_learning_rate" name="training_dpo_learning_rate"
+                   value="{{ settings.training_dpo_learning_rate }}" min="0.0000001" max="0.0005" step="any" required>
+          </div>
+          <div class="form-field">
+            <label for="training_dpo_beta">DPO beta</label>
+            <input type="number" id="training_dpo_beta" name="training_dpo_beta"
+                   value="{{ settings.training_dpo_beta }}" min="0.01" max="1" step="0.01" required>
+          </div>
+          <div class="form-field">
+            <label for="training_max_grad_norm"><span class="lang-pl">Maks. norma gradientu</span><span class="lang-en">Maximum gradient norm</span></label>
+            <input type="number" id="training_max_grad_norm" name="training_max_grad_norm"
+                   value="{{ settings.training_max_grad_norm }}" min="0.1" max="5" step="0.1" required>
+          </div>
+          <div class="form-field">
+            <label for="training_early_stopping_patience"><span class="lang-pl">Cierpliwość early stopping</span><span class="lang-en">Early-stopping patience</span></label>
+            <input type="number" id="training_early_stopping_patience" name="training_early_stopping_patience"
+                   value="{{ settings.training_early_stopping_patience }}" min="0" max="10" step="1" required>
+            <span class="field-hint"><span class="lang-pl">Epoki bez poprawy; 0 wyłącza.</span><span class="lang-en">Epochs without improvement; 0 disables.</span></span>
+          </div>
+        </div>
+        <span class="field-hint">
+          <span class="lang-pl">Wartości są zatwierdzane i zapisywane jako migawka przy starcie treningu. Aktywnego treningu nie można zmienić.</span>
+          <span class="lang-en">Values are validated and snapshotted when a run starts. An active run cannot be changed.</span>
+        </span>
+      </fieldset>
+      <fieldset class="form-field form-fieldset">
+        <legend><span class="lang-pl">Mieszanka danych treningowych (następny trening)</span><span class="lang-en">Training data mix (next training run)</span></legend>
+        <div class="tuning-grid">
+          <div class="form-field">
+            <label for="training_synthetic_ratio"><span class="lang-pl">Maks. par syntetycznych na parę ludzką</span><span class="lang-en">Maximum synthetic pairs per human pair</span></label>
+            <input type="number" id="training_synthetic_ratio" name="training_synthetic_ratio"
+                   value="{{ settings.training_synthetic_ratio }}" min="0" max="2" step="0.1" required>
+          </div>
+          <div class="form-field">
+            <label for="training_synthetic_pool_multiplier"><span class="lang-pl">Mnożnik puli syntetycznej</span><span class="lang-en">Synthetic pool multiplier</span></label>
+            <input type="number" id="training_synthetic_pool_multiplier" name="training_synthetic_pool_multiplier"
+                   value="{{ settings.training_synthetic_pool_multiplier }}" min="2" max="10" step="0.5" required>
+          </div>
+          <div class="form-field">
+            <label for="training_synthetic_reward_margin"><span class="lang-pl">Min. margines nagrody</span><span class="lang-en">Minimum reward margin</span></label>
+            <input type="number" id="training_synthetic_reward_margin" name="training_synthetic_reward_margin"
+                   value="{{ settings.training_synthetic_reward_margin }}" min="0" max="5" step="0.01" required>
+          </div>
+          <div class="form-field">
+            <label for="training_synthetic_min_token_edits"><span class="lang-pl">Min. liczba zmian tokenów</span><span class="lang-en">Minimum token edits</span></label>
+            <input type="number" id="training_synthetic_min_token_edits" name="training_synthetic_min_token_edits"
+                   value="{{ settings.training_synthetic_min_token_edits }}" min="1" max="20" step="1" required>
+          </div>
+        </div>
+        <span class="field-hint"><span class="lang-pl">Wartość 0 dla proporcji wyłącza generowanie. Etykiety ludzkie pozostają nadrzędne, a dane syntetyczne pochodzą tylko z bieżącej rundy.</span><span class="lang-en">A zero synthetic ratio disables generation. Human labels remain authoritative and synthetic data is current-round only.</span></span>
+      </fieldset>
+      <fieldset class="form-field form-fieldset">
+        <legend>
+          <span class="lang-pl">Widoczność elementów interfejsu adnotowania</span>
+          <span class="lang-en">Annotation UI visibility</span>
+        </legend>
+        <label class="checkbox-label">
+          <input type="checkbox" name="show_reference" id="show_reference"
+                 {% if settings.show_reference == 'true' %}checked{% endif %}>
+          <span class="lang-pl">Pokaż adnotatorom transkrypcję referencyjną</span>
+          <span class="lang-en">Show reference transcript to annotators</span>
+        </label>
+        <span class="field-hint" style="margin-left:1.6rem">
+          <span class="lang-pl">Odznacz tę opcję, gdy transkrypcje referencyjne są niedostępne.</span>
+          <span class="lang-en">Uncheck when ground-truth labels are unavailable.</span>
+        </span>
+        <label class="checkbox-label" style="margin-top:0.6rem">
+          <input type="checkbox" name="show_wer" id="show_wer"
+                 {% if settings.show_wer == 'true' %}checked{% endif %}>
+          <span class="lang-pl">Pokaż wskaźnik WER przy wpisywaniu korekty</span>
+          <span class="lang-en">Show live WER badge while typing a correction</span>
+        </label>
+        <span class="field-hint" style="margin-left:1.6rem">
+          <span class="lang-pl">Odznacz, aby wartość WER nie wpływała na wybór adnotatorów.</span>
+          <span class="lang-en">Uncheck to avoid biasing annotators toward the numerically better hypothesis.</span>
+        </span>
+      </fieldset>
+      <button type="submit" class="btn-save">
+        <span class="lang-pl">Zapisz ustawienia</span>
+        <span class="lang-en">Save Settings</span>
+      </button>
+    </form>
+  </section>
+
+  <!-- ===== Active sessions ===== -->
+  <section class="admin-section">
+    <h2>
+      <span class="lang-pl">Aktywni adnotatorzy</span>
+      <span class="lang-en">Active Annotators</span>
+      <small class="section-note">
+        <span class="lang-pl">(aktywność w ciągu ostatnich 2 min)</span>
+        <span class="lang-en">(heartbeat within last 2 min)</span>
+      </small>
+    </h2>
+    {% if active_sessions %}
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th><span class="lang-pl">Uczestnik</span><span class="lang-en">Participant</span></th>
+          <th><span class="lang-pl">Adnotacje (sesja)</span><span class="lang-en">Annotations (session)</span></th>
+          <th><span class="lang-pl">Ostatnio aktywny (UTC)</span><span class="lang-en">Last seen (UTC)</span></th>
+          <th><span class="lang-pl">Początek sesji (UTC)</span><span class="lang-en">Session started (UTC)</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in active_sessions %}
+        <tr>
+          <td>{{ s.participant_id }}</td>
+          <td>{{ s.annotation_count }}</td>
+          <td>{{ s.last_seen }}</td>
+          <td>{{ s.started_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <p class="muted">
+        <span class="lang-pl">Brak aktywnych adnotatorów.</span>
+        <span class="lang-en">No active annotators right now.</span>
+      </p>
+    {% endif %}
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <p class="footer-copy">
+      <span class="lang-pl">&copy; 2026 Katedra Systemów Multimedialnych, Politechnika Gdańska, Wydział Elektroniki, Telekomunikacji i Informatyki.</span>
+      <span class="lang-en">&copy; 2026 Department of Multimedia Systems, Gdańsk University of Technology, Faculty of Electronics, Telecommunication and Informatics.</span>
+    </p>
+    <p class="footer-disclaimer">
+      <span class="lang-pl">Autorzy usługi nie ponoszą odpowiedzialności za generowane przez nią treści, ani za konsekwencje dalszego ich wykorzystania.</span>
+      <span class="lang-en">The creators of the service bear no responsibility for the content it generates or for the consequences of its further use.</span>
+    </p>
+    <p class="footer-projects-title">
+      <span class="lang-pl">Usługa zrealizowana w ramach poniższych projektów.</span>
+      <span class="lang-en">Service created within the following projects.</span>
+    </p>
+    <p class="footer-project">
+      <a href="https://caise.pl/" target="_blank" rel="noopener">CAISE</a>
+      <span class="lang-pl"> (Cloud Artificial Intelligence Service Engineering) - Chmurowa Platforma do wytwarzania uniwersalnych usług inteligentnych dla różnych obszarów zastosowań. Instytucja wdrażająca: Narodowe Centrum Badań i Rozwoju (NCBR). Program finansujący: KPO IPCEI CIS C 3.1.1 Important Project of Common European Interest. Nr projektu: KPOD.05.10-IW.10-0005/24.</span>
+      <span class="lang-en"> (Cloud Artificial Intelligence Service Engineering) - Cloud platform for creating universal intelligent services for various application areas. Implementing Institution: National Centre for Research and Development (NCBR). Financing Program: KPO IPCEI CIS C 3.1.1 Important Project of Common European Interest. Project No.: KPOD.05.10-IW.10-0005/24.</span>
+    </p>
+    <p class="footer-project">
+      <a href="https://multimed.org/admedvoice" target="_blank" rel="noopener">ADMEDVOICE</a>
+      <span class="lang-pl"> - Adaptacyjny system inteligentnego przetwarzania mowy lekarzy wraz ze strukturalizacją wyników badań i wspomaganiem procesu terapeutycznego. Projekt współfinansowany przez Narodowe Centrum Badań i Rozwoju w ramach programu Infostrateg IV, nr projektu: INFOSTRATEG-IV/0003/2022.</span>
+      <span class="lang-en"> - Adaptive intelligent speech processing system of medical personnel with the structuring of test results and support of therapeutic process. The project was co-financed by the National Centre for Research and Development under the Infostrateg IV program, project number: INFOSTRATEG-IV/0003/2022.</span>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

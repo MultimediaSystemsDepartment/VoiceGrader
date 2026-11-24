@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAISE-ASR &mdash; Models &amp; Publishing</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260802-2">
+  <script src="/static/i18n.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-title">CAISE-ASR</div>
+    <div class="header-subtitle">
+      <span class="lang-pl">Modele i publikacja</span>
+      <span class="lang-en">Models &amp; Publishing</span>
+    </div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link lang-active">Wersja polska</a>
+      <span class="lang-sep">|</span>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle">
+    {% set admin_nav_active = "model-health" %}
+    {% include "_admin_nav.html" %}
+  </div>
+  <div class="header-logos">
+    <img src="/static/logo-caise.svg" alt="CAISE" class="logo-caise">
+    <img src="/static/logo-admedvoice.png" alt="ADMEDVOICE" class="logo-admedvoice">
+  </div>
+</header>
+
+<main class="health-main">
+  {% if canary_sets %}
+  <form method="GET" action="/admin/model-health" class="health-monitor-picker">
+    <label><span class="lang-pl">Zbiór oceny</span><span class="lang-en">Evaluation set</span>
+      <select name="canary_set_id" onchange="this.form.submit()">
+        {% for monitor in canary_sets %}
+        <option value="{{ monitor.id }}" {% if canary_set and monitor.id == canary_set.id %}selected{% endif %}>{{ monitor.name }}{% if monitor.is_promotion_gate %} · PROMOTION GATE{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+  {% endif %}
+  <div class="health-heading">
+    <div>
+      <h1><span class="lang-pl">Modele i publikacja</span><span class="lang-en">Models &amp; Publishing</span></h1>
+      {% if canary_set %}
+      <p>{{ canary_set.name }} &middot; {{ canary_set.target_size }} clips &middot; <code>{{ canary_set.fingerprint[:12] }}</code>{% if canary_set.is_promotion_gate %} &middot; <span class="health-chip health-chip--available"><span class="lang-pl">Brama promocji</span><span class="lang-en">Promotion gate</span></span>{% endif %}</p>
+      {% endif %}
+    </div>
+    <a class="btn-secondary" href="/admin/canary">
+      <span class="lang-pl">Ocena modelu</span><span class="lang-en">Model Evaluation</span>
+    </a>
+  </div>
+
+  <section class="active-policy-banner">
+    <div>
+      <span class="active-policy-label"><span class="lang-pl">Aktualnie wdrożony model</span><span class="lang-en">Currently deployed policy</span></span>
+      <strong>{{ active_policy.name if active_policy else "base / unknown" }}</strong>
+      {% if active_policy %}<code title="{{ active_policy.path }}">{{ active_policy.path }}</code>{% endif %}
+    </div>
+    <div class="active-policy-metrics">
+      {% if active_evaluation %}
+      <strong>{{ "%.2f" | format(active_evaluation.metrics.wer * 100) }}% WER</strong>
+      <span class="health-status health-status--{{ active_evaluation.health_status }}">{{ active_evaluation.health_status }}</span>
+      {% else %}
+      <span><span class="lang-pl">Brak oceny dla aktywnego modelu</span><span class="lang-en">No evaluation for active policy</span></span>
+      {% endif %}
+      {% if queue_refill_status == "running" %}<small><span class="lang-pl">Kolejka jest regenerowana z tego modelu</span><span class="lang-en">Queue is regenerating from this policy</span></small>{% endif %}
+    </div>
+  </section>
+
+  <section class="publication-band">
+    <div class="publication-copy">
+      <span class="active-policy-label"><span class="lang-pl">Model udostępniany jako latest</span><span class="lang-en">Model published as latest</span></span>
+      <strong>
+        {% if publication %}{{ publication.model_key }}{% else %}<span class="lang-pl">Jeszcze nie opublikowano</span><span class="lang-en">Not published yet</span>{% endif %}
+      </strong>
+      <code title="{{ latest_model_dir }}">{{ latest_model_dir }}</code>
+      {% if publication %}
+      <small>{{ publication.published_at }} &middot; {{ "%.2f" | format(publication.wer * 100) }}% WER &middot; <code>{{ publication.monitor_fingerprint[:12] }}</code></small>
+      {% endif %}
+      {% if publication_notice == "published" %}<p class="publication-success"><span class="lang-pl">Aktywny model został opublikowany.</span><span class="lang-en">The active model was published.</span></p>{% endif %}
+    </div>
+    <div class="publication-action">
+      {% if publication_matches_active %}
+      <span class="publication-current"><span class="lang-pl">Zgodny z wdrożonym modelem</span><span class="lang-en">Matches deployed policy</span></span>
+      {% elif publication %}
+      <span class="health-status health-status--warning"><span class="lang-pl">Starszy niż wdrożony model</span><span class="lang-en">Behind deployed policy</span></span>
+      {% endif %}
+      <form method="POST" action="/admin/model-health/publish-latest" onsubmit="return confirm('Publish the currently deployed model as latest?')">
+        <button class="btn-primary" type="submit" {% if not publication_allowed %}disabled{% endif %}>
+          <span class="lang-pl">Opublikuj jako latest</span><span class="lang-en">Publish as latest</span>
+        </button>
+      </form>
+      {% if not publication_allowed %}
+      <small>
+        {% if publication_evaluation %}
+        <span class="lang-pl">Poczekaj na zakończenie treningu.</span><span class="lang-en">Wait for training to finish.</span>
+        {% else %}
+        <span class="lang-pl">Najpierw uzyskaj zdrowy wynik wdrożonego modelu w bramie promocji{% if publication_monitor %} {{ publication_monitor.name }}{% endif %}.</span><span class="lang-en">First obtain a healthy result for the deployed policy on the promotion gate{% if publication_monitor %} {{ publication_monitor.name }}{% endif %}.</span>
+        {% endif %}
+      </small>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if not canary_set %}
+  <section class="health-empty">
+    <h2><span class="lang-pl">Brak zablokowanego zbioru oceny</span><span class="lang-en">No locked evaluation set</span></h2>
+    <p><span class="lang-pl">Uzupełnij i zablokuj transkrypcje zbioru przed oceną modeli.</span><span class="lang-en">Complete and lock the evaluation-set transcripts before evaluating models.</span></p>
+  </section>
+  {% elif not completed %}
+  <section class="health-empty">
+    <h2><span class="lang-pl">Oczekiwanie na ocenę</span><span class="lang-en">Awaiting evaluation</span></h2>
+    <p><code>py -3.12 run_evaluate_canary.py</code></p>
+  </section>
+  {% else %}
+  <section class="health-summary">
+    <div class="health-kpi"><strong>{{ completed | length }}</strong><span><span class="lang-pl">ocenionych modeli</span><span class="lang-en">models evaluated</span></span></div>
+    <div class="health-kpi health-kpi--{{ completed[-1].health_status }}"><strong>{{ "%.1f" | format(completed[-1].metrics.wer * 100) }}%</strong><span>WER &middot; {{ completed[-1].model_key }}</span></div>
+    <div class="health-kpi health-kpi--{{ completed[-1].health_status }}"><strong>{{ completed[-1].health_status }}</strong><span><span class="lang-pl">ostatnia ocena</span><span class="lang-en">latest evaluation</span></span></div>
+  </section>
+
+  <section class="health-chart-band">
+    <div class="health-chart-heading">
+      <h2>WER / CER</h2>
+      <div class="chart-legend"><span class="legend-wer">WER</span><span class="legend-cer">CER</span></div>
+    </div>
+    <svg class="health-chart" viewBox="0 0 760 205" role="img" aria-label="WER and CER trend">
+      {% for tick in chart_ticks %}
+      <line x1="48" y1="{{ '%.1f' | format(tick.y) }}" x2="740" y2="{{ '%.1f' | format(tick.y) }}" class="chart-grid" />
+      <text x="42" y="{{ '%.1f' | format(tick.y + 3) }}" text-anchor="end" class="chart-axis-label">{{ tick.label }}</text>
+      {% endfor %}
+      <line x1="48" y1="40" x2="48" y2="178" class="chart-axis" />
+      <line x1="48" y1="178" x2="740" y2="178" class="chart-axis" />
+      <polyline points="{{ wer_points }}" class="chart-line chart-line--wer" />
+      <polyline points="{{ cer_points }}" class="chart-line chart-line--cer" />
+      {% for point in chart_rows %}
+      <circle cx="{{ '%.1f' | format(point.x) }}" cy="{{ '%.1f' | format(point.wer_y) }}" r="3" class="chart-point chart-point--wer" />
+      <text x="{{ '%.1f' | format(point.x) }}" y="{{ '%.1f' | format(point.wer_y - 7) }}" text-anchor="middle" class="chart-value chart-value--wer">{{ '%.1f' | format(point.wer * 100) }}%</text>
+      <circle cx="{{ '%.1f' | format(point.x) }}" cy="{{ '%.1f' | format(point.cer_y) }}" r="3" class="chart-point chart-point--cer" />
+      <text x="{{ '%.1f' | format(point.x) }}" y="{{ '%.1f' | format(point.cer_y + 13) }}" text-anchor="middle" class="chart-value chart-value--cer">{{ '%.1f' | format(point.cer * 100) }}%</text>
+      {% endfor %}
+    </svg>
+  </section>
+
+  <section class="health-table-section">
+    <h2><span class="lang-pl">Historia checkpointów</span><span class="lang-en">Checkpoint History</span></h2>
+    <div class="health-table-wrap">
+      <table class="health-table">
+        <thead><tr><th>Checkpoint</th><th>Stage</th><th>WER</th><th>Δ corpus WER vs base (95% CI)</th><th><span class="lang-pl">Zmiana wyjścia</span><span class="lang-en">Output change</span></th><th>CER</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for evaluation in completed %}
+          <tr class="{% if selected and selected.id == evaluation.id %}is-selected{% endif %}{% if evaluation.is_active %} is-active-policy{% endif %}">
+            <td><a href="/admin/model-health?canary_set_id={{ canary_set.id }}&amp;evaluation_id={{ evaluation.id }}">{{ evaluation.model_key }}</a>{% if evaluation.is_active %}<span class="active-policy-chip"><span class="lang-pl">Aktywny</span><span class="lang-en">Active</span></span>{% endif %}</td>
+            <td>{{ evaluation.stage }}</td>
+            <td>{{ "%.2f" | format(evaluation.metrics.wer * 100) }}%</td>
+            <td>
+              {% if evaluation.wer_ci %}
+              <div class="ci-bar" title="{{ '%.2f' | format(evaluation.wer_ci.low * 100) }} to {{ '%.2f' | format(evaluation.wer_ci.high * 100) }} pp">
+                <span class="ci-zero"></span>
+                <span class="ci-range" style="left:{{ evaluation.wer_ci.left }}%;width:{{ evaluation.wer_ci.width }}%"></span>
+                <span class="ci-marker" style="left:{{ evaluation.wer_ci.marker }}%"></span>
+              </div>
+              <small>{{ "%+.2f" | format(evaluation.wer_ci.delta * 100) }} pp</small>
+              {% else %}&mdash;{% endif %}
+            </td>
+            <td>
+              {% if evaluation.output_diff %}
+              <strong>{{ evaluation.output_diff.changed }}/{{ evaluation.output_diff.total }}</strong>
+              <small title="{{ evaluation.output_diff.previous_model_key }}"><span class="lang-pl">vs poprzedni {{ evaluation.stage }}</span><span class="lang-en">vs previous {{ evaluation.stage }}</span></small>
+              {% else %}&mdash;{% endif %}
+            </td>
+            <td>{{ "%.2f" | format(evaluation.metrics.cer * 100) }}%</td>
+            <td><span class="health-status health-status--{{ evaluation.health_status }}">{{ evaluation.health_status }}</span></td>
+            <td>
+              {% if evaluation.is_active %}
+              <strong class="active-policy-current"><span class="lang-pl">Wdrożony</span><span class="lang-en">Deployed</span></strong>
+              {% elif evaluation.stage != "base" %}
+              <form method="POST" action="/admin/model-health/rollback/{{ evaluation.checkpoint_id }}" onsubmit="return confirm('Activate this checkpoint?')">
+                <button class="btn-secondary" type="submit"><span class="lang-pl">Przywróć</span><span class="lang-en">Rollback</span></button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% if selected %}
+  <section class="health-table-section">
+    <h2><span class="lang-pl">Porównanie transkrypcji</span><span class="lang-en">Transcript Comparison</span> &middot; {{ selected.model_key }}</h2>
+    {% if selected.warnings %}<p class="health-warning">{{ selected.warnings | join(", ") }}</p>{% endif %}
+    {% if selected.output_diff %}<p class="info-note"><strong>{{ selected.output_diff.changed }}/{{ selected.output_diff.total }}</strong> <span class="lang-pl">transkrypcji zmienionych względem poprzedniego checkpointu {{ selected.stage }}.</span><span class="lang-en">transcripts changed versus the previous {{ selected.stage }} checkpoint.</span></p>{% endif %}
+    <div class="health-table-wrap">
+      <table class="health-table health-table--transcripts">
+        <thead><tr><th>Audio</th><th><span class="lang-pl">Wzorzec</span><span class="lang-en">Reference</span></th>{% if selected.output_diff %}<th><span class="lang-pl">Poprzednia hipoteza</span><span class="lang-en">Previous hypothesis</span></th>{% endif %}<th><span class="lang-pl">Hipoteza</span><span class="lang-en">Hypothesis</span></th><th>WER</th></tr></thead>
+        <tbody>
+        {% for prediction in predictions %}
+          <tr{% if prediction.changed_from_previous %} class="health-transcript-changed"{% endif %}>
+            <td>
+              <audio controls preload="none" src="/admin/canary/audio/{{ prediction.canary_item_id }}"></audio>
+              <span class="canary-identifiers">
+                <code title="Evaluation set item ID">{{ prediction.canary_item_id[:8] }}</code>
+                <small title="Audio ID">audio {{ prediction.audio_id[:8] }}</small>
+              </span>
+            </td>
+            <td>{{ prediction.transcript }}</td>
+            {% if selected.output_diff %}<td>{{ prediction.previous_hypothesis or "—" }}</td>{% endif %}
+            <td>{{ prediction.hypothesis }}</td>
+            <td>{{ "%.1f" | format(prediction.metrics.wer * 100) }}%</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if activations %}
+  <section class="health-table-section">
+    <h2><span class="lang-pl">Historia aktywacji</span><span class="lang-en">Activation History</span></h2>
+    <div class="health-table-wrap">
+      <table class="health-table">
+        <thead><tr><th><span class="lang-pl">Czas</span><span class="lang-en">Time</span></th><th><span class="lang-pl">Poprzedni</span><span class="lang-en">Previous</span></th><th><span class="lang-pl">Nowy</span><span class="lang-en">New</span></th><th><span class="lang-pl">Powód</span><span class="lang-en">Reason</span></th><th>Actor</th><th>Warning</th></tr></thead>
+        <tbody>
+        {% for activation in activations %}
+          <tr><td>{{ activation.activated_at }}</td><td>{{ activation.previous_model_key or "base / unknown" }}</td><td>{{ activation.new_model_key }}</td><td>{{ activation.reason }}</td><td>{{ activation.actor }}</td><td>{{ "yes" if activation.warning_present else "no" }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+  {% endif %}
+</main>
+</body>
+</html>

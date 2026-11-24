@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RLHF Signal Room</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='dashboard.css') }}">
+  <script src="{{ url_for('static', path='vendor/echarts.min.js') }}"></script>
+  <script defer src="{{ url_for('static', path='dashboard.js') }}"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-block">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <p class="eyebrow">RLHF SERVICE ANALYTICS</p>
+        <h1>Signal Room</h1>
+      </div>
+    </div>
+    <div class="topbar-status">
+      <span id="indexStatus" class="status-dot status-dot--idle"></span>
+      <span id="indexStatusText">Opening local index</span>
+      <button id="refreshButton" class="command-button" type="button">Rescan artifacts</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="control-band" aria-label="Dashboard filters">
+      <label class="field field--run">
+        <span>Artifact</span>
+        <select id="runSelect"></select>
+      </label>
+      <div class="field">
+        <span>Window</span>
+        <div class="segmented" id="rangePresets">
+          <button type="button" data-range="21600">6h</button>
+          <button type="button" data-range="86400">24h</button>
+          <button type="button" data-range="604800">7d</button>
+          <button type="button" data-range="all" class="is-active">All</button>
+        </div>
+      </div>
+      <label class="field">
+        <span>From</span>
+        <input id="rangeStart" type="datetime-local" step="1">
+      </label>
+      <label class="field">
+        <span>To</span>
+        <input id="rangeEnd" type="datetime-local" step="1">
+      </label>
+      <button id="applyRange" class="primary-button" type="button">Apply window</button>
+    </section>
+
+    <section id="loadingState" class="state-panel">
+      <div class="loader" aria-hidden="true"></div>
+      <strong>Indexing diagnostics</strong>
+      <span>Building local time-series views from immutable artifacts.</span>
+    </section>
+
+    <section id="emptyState" class="state-panel is-hidden">
+      <strong>No diagnostics archives found</strong>
+      <span>Input directory: {{ data_dir }}</span>
+    </section>
+
+    <div id="dashboard" class="is-hidden">
+      <section class="run-strip">
+        <div>
+          <div class="run-title-row">
+            <h2 id="runTitle">Diagnostics capture</h2>
+            <span id="runState" class="state-badge">unknown</span>
+          </div>
+          <p id="runPeriod" class="run-period"></p>
+        </div>
+        <div id="qualityFlags" class="quality-flags"></div>
+      </section>
+
+      <section class="kpi-grid" aria-label="Run summary">
+        <article class="kpi kpi--ink">
+          <span>Capture span <button class="measure-info" type="button" aria-label="About capture span" data-tooltip="Elapsed time between the first and last indexed sample in the selected artifact.">i</button></span>
+          <strong id="kpiSpan">—</strong>
+          <small id="kpiSamples">— samples</small>
+        </article>
+        <article class="kpi kpi--teal">
+          <span>HTTP requests <button class="measure-info" type="button" aria-label="About HTTP requests" data-tooltip="Number of recorded HTTP request events. The secondary value is the share that returned an error status.">i</button></span>
+          <strong id="kpiRequests">—</strong>
+          <small id="kpiErrorRate">— error rate</small>
+        </article>
+        <article class="kpi kpi--coral">
+          <span>HTTP p95 <button class="measure-info" type="button" aria-label="About HTTP p95 latency" data-tooltip="95th-percentile request duration: 95% of recorded requests completed in this time or less.">i</button></span>
+          <strong id="kpiP95">—</strong>
+          <small id="kpiMaxLatency">— max</small>
+        </article>
+        <article class="kpi kpi--amber">
+          <span>Issue openings <button class="measure-info" type="button" aria-label="About issue openings" data-tooltip="Diagnostic issue_opened events emitted by collectors. One condition can open again after being resolved.">i</button></span>
+          <strong id="kpiIssues">—</strong>
+          <small id="kpiErrorIssues">— errors</small>
+        </article>
+        <article class="kpi kpi--green">
+          <span>Pending pairs <button class="measure-info" type="button" aria-label="About pending pairs" data-tooltip="Latest number of generated comparison pairs still waiting for an annotation in the selected window.">i</button></span>
+          <strong id="kpiPending">—</strong>
+          <small id="kpiAnnotated">— annotated</small>
+        </article>
+        <article class="kpi kpi--blue">
+          <span>CPU peak <button class="measure-info" type="button" aria-label="About CPU peak" data-tooltip="Highest observed CPU utilization across indexed host samples. The secondary value is the lowest available-memory percentage.">i</button></span>
+          <strong id="kpiCpu">—</strong>
+          <small id="kpiMemory">— min memory free</small>
+        </article>
+      </section>
+
+      <section class="panel panel--wide">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">RUNTIME PRESSURE</p>
+            <h3>Compute and memory</h3>
+          </div>
+          <button class="export-button" type="button" data-chart="hostChart">Export PNG</button>
+        </div>
+        <div id="hostChart" class="chart" role="img" aria-label="CPU and memory utilization timeline"></div>
+      </section>
+
+      <div class="panel-grid">
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">SERVICE FLOW</p>
+              <h3>Queue and annotations</h3>
+            </div>
+            <button class="export-button" type="button" data-chart="platformChart">Export PNG</button>
+          </div>
+          <div id="platformChart" class="chart" role="img" aria-label="Pending pairs and annotations timeline"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">REQUEST PATH</p>
+              <h3>Traffic, errors and latency</h3>
+            </div>
+            <button class="export-button" type="button" data-chart="httpChart">Export PNG</button>
+          </div>
+          <div id="httpChart" class="chart" role="img" aria-label="HTTP traffic errors and latency timeline"></div>
+        </section>
+      </div>
+
+      <section class="panel panel--table">
+        <div class="panel-heading panel-heading--filters">
+          <div>
+            <p class="panel-kicker">ROUTE BREAKDOWN</p>
+            <h3>Endpoint behavior</h3>
+          </div>
+          <label class="search-field">
+            <span>Filter routes</span>
+            <input id="routeFilter" type="search" placeholder="/audio, /api/submit…">
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Route</th>
+                <th class="number">Requests</th>
+                <th class="number">Errors</th>
+                <th class="number">Error rate</th>
+                <th class="number">Average</th>
+                <th class="number">p95</th>
+                <th class="number">Maximum</th>
+              </tr>
+            </thead>
+            <tbody id="routeRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="panel-grid panel-grid--lower">
+        <section class="panel panel--table">
+          <div class="panel-heading panel-heading--filters">
+            <div>
+              <p class="panel-kicker">DIAGNOSTIC EVENTS</p>
+              <h3>Issue timeline</h3>
+            </div>
+            <label class="compact-field">
+              <span>Severity</span>
+              <select id="issueSeverity">
+                <option value="all">All</option>
+                <option value="error">Errors</option>
+                <option value="warning">Warnings</option>
+              </select>
+            </label>
+          </div>
+          <div id="issueList" class="issue-list"></div>
+        </section>
+
+        <section class="panel metadata-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="panel-kicker">PROVENANCE</p>
+              <h3>Capture metadata</h3>
+            </div>
+          </div>
+          <dl id="metadataList" class="metadata-list"></dl>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <span>Read-only local analysis</span>
+    <code>{{ data_dir }}</code>
+  </footer>
+</body>
+</html>

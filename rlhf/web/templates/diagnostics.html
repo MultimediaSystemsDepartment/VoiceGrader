@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="5">
+  <title>CAISE-ASR &mdash; Diagnostics</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260803-1">
+  <script src="/static/i18n.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-title">CAISE-ASR</div>
+    <div class="header-subtitle"><span class="lang-pl">Diagnostyka wydajności</span><span class="lang-en">Performance Diagnostics</span></div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link lang-active">Wersja polska</a>
+      <span class="lang-sep">|</span>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle">
+    {% set admin_nav_active = "diagnostics" %}
+    {% include "_admin_nav.html" %}
+  </div>
+  <div class="header-logos">
+    <img src="/static/logo-caise.svg" alt="CAISE" class="logo-caise">
+    <img src="/static/logo-admedvoice.png" alt="ADMEDVOICE" class="logo-admedvoice">
+  </div>
+</header>
+<main class="admin-main diagnostics-main">
+  <section class="admin-section diagnostics-capture">
+    {% if pending_action %}
+    <p class="diagnostics-notice" role="status">
+      <span class="lang-pl">Żądanie zostało wysłane. Oczekiwanie na potwierdzenie kolektora…</span>
+      <span class="lang-en">Request sent. Waiting for collector acknowledgement…</span>
+    </p>
+    {% elif requested_action %}
+    <p class="diagnostics-notice diagnostics-notice--accepted" role="status">
+      <span class="lang-pl">Kolektor potwierdził ostatnie żądanie.</span>
+      <span class="lang-en">The collector acknowledged the latest request.</span>
+    </p>
+    {% endif %}
+    <div class="annotation-section-head">
+      <div>
+        <h1><span class="lang-pl">Rejestracja diagnostyczna</span><span class="lang-en">Diagnostics Capture</span></h1>
+        <p class="info-note">Collector: <strong>{{ status.state }}</strong> &middot; {{ status.samples or 0 }} samples &middot; {{ "%.1f" | format(disk_free_gib) }} GiB free</p>
+      </div>
+      {% if status.state == "running" %}
+      <form method="POST" action="/admin/diagnostics/stop" class="diagnostics-command-form"><button type="submit" class="btn-destructive"{% if pending_action %} disabled{% endif %}><span class="lang-pl">Zatrzymaj</span><span class="lang-en">Stop capture</span></button></form>
+      {% else %}
+      <form method="POST" action="/admin/diagnostics/start" class="diagnostics-start-form diagnostics-command-form">
+        <input type="text" name="name" maxlength="120" placeholder="Run label">
+        <button type="submit" class="btn-secondary"{% if pending_action %} disabled{% endif %}><span class="lang-pl">Rozpocznij</span><span class="lang-en">Start capture</span></button>
+      </form>
+      {% endif %}
+    </div>
+    {% if status.run_id %}<p><code>{{ status.run_id }}</code></p>{% endif %}
+    {% if status.error %}<p class="health-warning">{{ status.error }}</p>{% endif %}
+  </section>
+
+  <section class="admin-section">
+    <h2><span class="lang-pl">Zapisane uruchomienia</span><span class="lang-en">Saved Runs</span></h2>
+    <div class="health-table-wrap">
+      <table class="health-table diagnostics-table">
+        <colgroup>
+          <col class="diagnostics-col-run">
+          <col class="diagnostics-col-status">
+          <col class="diagnostics-col-samples">
+          <col class="diagnostics-col-bundles">
+          <col class="diagnostics-col-actions">
+        </colgroup>
+        <thead><tr><th>Run</th><th>Status</th><th>Samples</th><th>Bundles</th><th>Actions</th></tr></thead>
+        <tbody>
+        {% for run in runs %}
+          <tr>
+            <td class="diagnostics-run" data-label="Run"><strong>{{ run.name or "unnamed" }}</strong><small><code title="{{ run.run_id }}">{{ run.run_id }}</code><span>{{ run.started_at }}</span></small></td>
+            <td data-label="Status"><span class="training-badge training-badge--{{ run.state }}">{{ run.state }}</span></td>
+            <td data-label="Samples">{{ run.samples or 0 }}</td>
+            <td data-label="Bundles">
+              <div class="diagnostics-bundles">
+              {% for kind, bundle in run.bundles.items() %}
+              <div class="diagnostics-bundle">
+                <a class="btn-secondary" href="/admin/diagnostics/{{ run.run_id }}/download/{{ kind }}{% if kind == 'sensitive' %}?confirm_sensitive=yes{% endif %}"{% if kind == 'sensitive' %} onclick="return confirm('This download contains the annotation database and raw logs. Continue?')"{% endif %}>{{ kind }} ({{ (bundle.size / 1048576) | round(1) }} MiB)</a>
+                <small><strong>{% if bundle.partial %}<span class="lang-pl">częściowy</span><span class="lang-en">partial</span>{% else %}<span class="lang-pl">końcowy</span><span class="lang-en">final</span>{% endif %}</strong> · {{ bundle.samples }} samples · {{ bundle.captured_at }}<br>SHA-256 <code class="diagnostics-hash" title="{{ bundle.sha256 }}">{{ bundle.sha256 }}</code></small>
+              </div>
+              {% endfor %}
+              </div>
+            </td>
+            <td class="diagnostics-actions" data-label="Actions">
+              <form method="POST" action="/admin/diagnostics/{{ run.run_id }}/bundle/sanitized" class="diagnostics-command-form"><button type="submit" class="btn-secondary"{% if pending_action %} disabled{% endif %}><span class="lang-pl">{% if run.state == "running" %}Odśwież częściowy{% elif run.state == "completed" %}Zbuduj końcowy{% else %}Zbuduj częściowy{% endif %}</span><span class="lang-en">{% if run.state == "running" %}Refresh partial{% elif run.state == "completed" %}Build final{% else %}Build partial{% endif %}</span></button></form>
+              <form method="POST" action="/admin/diagnostics/{{ run.run_id }}/bundle/sensitive" class="diagnostics-command-form" onsubmit="return confirm('This bundle contains the annotation database and raw application logs. Continue?')"><input type="hidden" name="confirm_sensitive" value="yes"><button type="submit" class="btn-secondary"{% if pending_action %} disabled{% endif %}><span class="lang-pl">Zbuduj wrażliwy</span><span class="lang-en">Build sensitive</span></button></form>
+              {% if run.state != "running" %}
+              <form method="POST" action="/admin/diagnostics/{{ run.run_id }}/delete" class="diagnostics-command-form" onsubmit="return confirm('Delete this diagnostics run?')"><button type="submit" class="btn-destructive"{% if pending_action %} disabled{% endif %}><span class="lang-pl">Usuń</span><span class="lang-en">Delete</span></button></form>
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5"><span class="lang-pl">Brak zapisanych uruchomień.</span><span class="lang-en">No saved runs.</span></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<script>
+  document.querySelectorAll('.diagnostics-command-form').forEach(function (form) {
+    form.addEventListener('submit', function () {
+      var button = form.querySelector('button[type="submit"]');
+      if (!button) return;
+      button.disabled = true;
+      button.textContent = document.documentElement.getAttribute('data-lang') === 'en'
+        ? 'Request sent…'
+        : 'Wysłano żądanie…';
+    });
+  });
+</script>
+</body>
+</html>
+

@@ -1,0 +1,38 @@
+stages:
+  - build
+  - package
+
+build_image:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.14.0-debug
+    entrypoint: [""]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf "%s:%s" "${CI_REGISTRY_USER}" "${CI_REGISTRY_PASSWORD}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/Dockerfile"
+      --destination "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+      --compressed-caching=false 
+      --use-new-run 
+      --cleanup
+
+publish_chart:
+  stage: package
+  image: 
+    name: alpine/helm:3.12.0
+    entrypoint: [""]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - helm plugin install https://github.com/chartmuseum/helm-push
+  script:
+    - sed -i "s/tag:.*/tag:\ \"$CI_COMMIT_SHORT_SHA\"/g" ./charts/asr-caise/values.yaml
+    - helm package ./charts/asr-caise --version "1.0.$CI_PIPELINE_ID" --app-version "$CI_COMMIT_SHORT_SHA"
+    - helm repo add gitlab ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/helm/stable --username $CI_REGISTRY_USER --password $CI_REGISTRY_PASSWORD
+    - helm repo update
+    - helm cm-push asr-caise-*.tgz gitlab --username $CI_REGISTRY_USER --password $CI_REGISTRY_PASSWORD

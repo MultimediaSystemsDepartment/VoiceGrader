@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Install WhiSQA python module from github.
+# Installing the module also downloads the models.
+# Reqs: numpy, torch, transformers
+
+pip install --no-deps git+https://github.com/leto19/WhiSQA.git@py_module

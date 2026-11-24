@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="15">
+  <title>CAISE-ASR &mdash; Reward Audit</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260801-8">
+  <script src="/static/i18n.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-title">CAISE-ASR</div>
+    <div class="header-subtitle"><span class="lang-pl">Audyt modelu nagrody</span><span class="lang-en">Reward Audit</span></div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link lang-active">Wersja polska</a>
+      <span class="lang-sep">|</span>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle">
+    {% set admin_nav_active = "reward-audit" %}
+    {% include "_admin_nav.html" %}
+  </div>
+  <div class="header-logos">
+    <img src="/static/logo-caise.svg" alt="CAISE" class="logo-caise">
+    <img src="/static/logo-admedvoice.png" alt="ADMEDVOICE" class="logo-admedvoice">
+  </div>
+</header>
+
+<main class="admin-main reward-audit-main">
+  <section class="admin-section reward-audit-controls">
+    <div class="reward-audit-heading">
+      <div>
+        <h1><span class="lang-pl">Audyt modelu nagrody</span><span class="lang-en">Reward Audit</span></h1>
+        <p class="info-note"><span class="lang-pl">Porównaj ranking wybranego checkpointu z oceną człowieka.</span><span class="lang-en">Compare a selected checkpoint's ranking with human judgment.</span></p>
+      </div>
+      {% if jobs %}
+      <form method="GET" action="/admin/reward-audit">
+        <label><span class="lang-pl">Uruchomienie</span><span class="lang-en">Run</span>
+          <select name="job_id" onchange="this.form.submit()">
+            {% for job in jobs %}
+            <option value="{{ job.id }}" {% if selected_job and selected_job.id == job.id %}selected{% endif %}>{{ job.created_at }} · {{ job.checkpoint_name }} · {{ job.status }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
+      {% endif %}
+    </div>
+
+    {% if error %}<p class="health-warning">{{ error }}</p>{% endif %}
+    {% if checkpoints %}
+    <form method="POST" action="/admin/reward-audit/create" class="reward-audit-form">
+      <label><span class="lang-pl">Checkpoint nagrody</span><span class="lang-en">Reward checkpoint</span>
+        <select name="checkpoint_path" required>
+          {% for checkpoint in checkpoints %}<option value="{{ checkpoint }}">{{ checkpoint.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label><span class="lang-pl">Wybór</span><span class="lang-en">Selection</span>
+        <select name="selection_mode">
+          <option value="random">Losowy / Random</option>
+          <option value="search">Wyszukiwanie / Search</option>
+        </select>
+      </label>
+      <label><span class="lang-pl">Liczba par</span><span class="lang-en">Pairs</span><input type="number" name="sample_size" min="1" max="100" value="10" required></label>
+      <label class="reward-audit-query"><span class="lang-pl">ID, nazwa lub ścieżka</span><span class="lang-en">ID, filename, or path</span><input type="search" name="query" placeholder="audio ID / pair ID / filename"></label>
+      <button type="submit" class="btn-secondary"><span class="lang-pl">Uruchom audyt</span><span class="lang-en">Run audit</span></button>
+    </form>
+    {% else %}
+    <p class="health-warning"><span class="lang-pl">Brak checkpointów modelu nagrody.</span><span class="lang-en">No reward-model checkpoints found.</span></p>
+    {% endif %}
+  </section>
+
+  {% if selected_job %}
+  <section class="admin-section">
+    <div class="reward-audit-status-line">
+      <span class="training-badge training-badge--{{ selected_job.status }}">{{ selected_job.status }}</span>
+      <strong>{{ selected_job.checkpoint_name }}</strong>
+      <span>{{ selected_job.scored_count }}/{{ selected_job.item_count }}</span>
+      {% if selected_job.query %}<code>{{ selected_job.query }}</code>{% endif %}
+    </div>
+    {% if selected_job.error_summary %}<p class="health-warning">{{ selected_job.error_summary }}</p>{% endif %}
+    <div class="health-table-wrap">
+      <table class="health-table reward-audit-table">
+        <thead>
+          <tr>
+            <th>Audio / ID</th><th>A</th><th>B</th><th><span class="lang-pl">Wynik</span><span class="lang-en">Scores</span></th><th><span class="lang-pl">Człowiek</span><span class="lang-en">Human</span></th><th><span class="lang-pl">Zgodność</span><span class="lang-en">Agreement</span></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for item in items %}
+          <tr class="{% if item.agreement is sameas false %}reward-audit-disagreement{% endif %}">
+            <td>
+              <audio controls preload="none" src="/admin/reward-audit/audio/{{ item.pair_id }}"></audio>
+              <span class="canary-identifiers"><code title="Pair ID">{{ item.pair_id[:8] }}</code><small title="Audio ID">audio {{ item.audio_id[:8] }}</small></span>
+              <small title="{{ item.file_path }}">{{ item.file_path | replace('\\', '/') | truncate(48, True, '…') }}</small>
+            </td>
+            <td><strong>A</strong> {{ item.hyp_a }}<small>{{ item.strategy_a }}</small></td>
+            <td><strong>B</strong> {{ item.hyp_b }}<small>{{ item.strategy_b }}</small></td>
+            <td>
+              {% if item.reward_a is not none %}
+              <div>A {{ "%.4f" | format(item.reward_a) }}</div><div>B {{ "%.4f" | format(item.reward_b) }}</div>
+              <strong>{{ item.reward_preference | upper }}</strong> · Δ {{ "%.4f" | format(item.margin) }}
+              {% else %}&mdash;{% endif %}
+            </td>
+            <td>
+              <strong>{{ item.preference | upper if item.preference else "—" }}</strong>
+              {% if item.correction_text %}<small>{{ item.correction_text }}</small>{% endif %}
+            </td>
+            <td>
+              {% if item.agreement is sameas true %}<span class="reward-agreement reward-agreement--yes"><span class="lang-pl">zgodny</span><span class="lang-en">agree</span></span>
+              {% elif item.agreement is sameas false %}<span class="reward-agreement reward-agreement--no"><span class="lang-pl">rozbieżny</span><span class="lang-en">disagree</span></span>
+              {% else %}&mdash;{% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6"><span class="lang-pl">Brak pozycji.</span><span class="lang-en">No items.</span></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</main>
+</body>
+</html>

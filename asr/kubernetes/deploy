@@ -1,0 +1,46 @@
+#!/bin/bash
+
+CONTAINER="containers.projects.task.gda.pl/caise/spaces/pl0161-01/asr_workflow:latest"
+POD="deploy/asr-deployment"
+
+# Clear docker container if exists
+docker rmi $CONTAINER >/dev/null 2>&1
+
+# Tag docker container
+docker tag asr_workflow:latest $CONTAINER || exit
+
+# Push container to the repository
+docker push $CONTAINER || exit
+
+# Remove the container
+docker rm $CONTAINER
+
+# Delete the pod
+kubectl delete $POD --ignore-not-found
+kubectl wait --for=delete pod/$POD --timeout=60s 2>/dev/null
+
+# Start the pod
+kubectl apply -f asr_workflow.yaml
+
+# Wait until the pod is running
+while true; do
+    PHASE=$(kubectl get pod $POD -o jsonpath='{.status.phase}' 2>/dev/null) 
+    if [ "$PHASE" = "Running" ]; then
+        echo "Success: Pod $POD is now Running."
+        break
+    elif [ "$PHASE" = "Failed" ]; then
+        echo "Error: Pod $POD failed to start."
+        exit 1
+    elif [ -z "$PHASE" ]; then
+        echo "Waiting for pod to be created..."
+    else
+        WAITING_REASON=$(kubectl get pod $POD -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null)
+        if [[ "$WAITING_REASON" == "ImagePullBackOff" || "$WAITING_REASON" == "CrashLoopBackOff" ]]; then
+            echo "Error: Pod stuck in error state: $WAITING_REASON"
+            exit 1
+        fi
+        echo "Current status: $PHASE... waiting."
+    fi
+    sleep 2
+
+

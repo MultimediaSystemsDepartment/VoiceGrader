@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VoiceMed ASR RLHF Stress Testing Panel</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>VoiceMed ASR RLHF Stress Testing Panel</h1>
+    </div>
+    <div id="statusBadge" class="status" data-status="loading">Loading</div>
+  </header>
+
+  <main>
+    <section class="telemetry" aria-label="Runtime telemetry">
+      <div><span>GPU:</span> <strong id="gpuName">Unavailable</strong></div>
+      <div><span>Utilization:</span> <strong id="gpuUtil">--</strong></div>
+      <div><span>VRAM:</span> <strong id="gpuMemory">--</strong></div>
+      <div><span>Temperature:</span> <strong id="gpuTemperature">--</strong></div>
+      <div><span>Power:</span> <strong id="gpuPower">--</strong></div>
+    </section>
+
+    <section class="workspace">
+      <div class="controls">
+        <div class="section-heading">
+          <p class="eyebrow">WORKLOAD</p>
+          <h2>Run control</h2>
+        </div>
+
+        <fieldset id="profiles">
+          <legend>Profile</legend>
+          <label><input type="radio" name="profile" value="smoke"><span>Smoke</span></label>
+          <label><input type="radio" name="profile" value="standard" checked><span>Standard</span></label>
+          <label><input type="radio" name="profile" value="endurance"><span>Endurance</span></label>
+          <label><input type="radio" name="profile" value="max-load"><span>Max load</span></label>
+        </fieldset>
+        <p id="profileDescription" class="profile-description"></p>
+
+        <div class="fields">
+          <label>Rounds<input id="rounds" type="number" min="1" max="100000"></label>
+          <label>Samples / round<input id="samples" type="number" min="1" max="10000"></label>
+          <label>SFT epochs<input id="sftEpochs" type="number" min="1" max="20"></label>
+          <label>DPO epochs<input id="dpoEpochs" type="number" min="1" max="20"></label>
+        </div>
+        <p id="profileDetails" class="profile-details"></p>
+
+        <div class="actions">
+          <button id="startButton" class="primary">Start run</button>
+          <button id="stopButton">Stop</button>
+          <button id="forceButton" class="danger">Force stop</button>
+        </div>
+        <p id="message" role="status"></p>
+      </div>
+
+      <div class="activity">
+        <div class="section-heading">
+          <p class="eyebrow">CURRENT RUN</p>
+          <h2 id="stage">Idle</h2>
+        </div>
+        <dl>
+          <div><dt>Run ID:</dt> <dd id="runId">--</dd></div>
+          <div><dt>Round:</dt> <dd id="round">--</dd></div>
+          <div><dt>Progress:</dt> <dd id="progress">--</dd></div>
+          <div><dt>Dataset:</dt> <dd id="dataset">Checking</dd></div>
+        </dl>
+        <p id="datasetNotice" class="notice" role="status"></p>
+        <div class="progress-track"><div id="progressBar"></div></div>
+      </div>
+    </section>
+
+    <details class="glossary">
+      <summary>Training glossary</summary>
+      <dl>
+        <div><dt>Round</dt><dd>A complete generation, SFT, and DPO cycle. The next round continues from the previous DPO checkpoint.</dd></div>
+        <div><dt>Samples / round</dt><dd>The number of ADMEDVOICE audio clips selected for candidate generation in each round.</dd></div>
+        <div><dt>SFT</dt><dd>Supervised fine-tuning on the known ADMEDVOICE transcripts.</dd></div>
+        <div><dt>DPO</dt><dd>Direct Preference Optimization on pairs selected by transcript-based word error rate.</dd></div>
+        <div><dt>Epoch</dt><dd>One complete pass through the current round's training examples.</dd></div>
+        <div><dt>Batch size</dt><dd>The number of clips processed together on the GPU. Larger batches generally require more VRAM.</dd></div>
+        <div><dt>Gradient accumulation</dt><dd>Combines gradients from several batches before an optimizer update, increasing the effective batch without matching VRAM growth.</dd></div>
+      </dl>
+    </details>
+
+    <section class="log-panel">
+      <div class="section-heading log-heading">
+        <div><p class="eyebrow">LIVE OUTPUT</p><h2>Training log</h2></div>
+        <label class="follow"><input id="followLog" type="checkbox" checked> Follow</label>
+      </div>
+      <pre id="logOutput" aria-live="polite">Waiting for a run.</pre>
+    </section>
+  </main>
+  <script src="/static/app.js?v=3"></script>
+</body>
+</html>

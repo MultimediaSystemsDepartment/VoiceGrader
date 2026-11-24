@@ -1,0 +1,15 @@
+{
+  "_comment": "Paths can be absolute OR relative to the project root. Run 'prepare_data.py' to generate manifests; manifests already committed use the paths below. Audio lives inside zip: URIs -- no admedvoice_audio_dir needed.",
+  "admedvoice_train_csv": "_data/manifests/admedvoice_train.csv",
+  "admedvoice_val_csv": "",
+  "admedvoice_test_csv": "_data/manifests/admedvoice_test.csv",
+  "commonvoice_train_csv": "",
+  "commonvoice_val_csv": "",
+  "commonvoice_test_csv": "",
+  "csv_delimiter": ";",
+  "admedvoice_audio_dir": "",
+  "commonvoice_audio_dir": "",
+  "latest_model_dir": "_outputs/latest",
+  "whisper_model_id": "openai/whisper-large-v3",
+  "bert_model_id": "dkleczek/bert-base-polish-uncased-v1"
+}

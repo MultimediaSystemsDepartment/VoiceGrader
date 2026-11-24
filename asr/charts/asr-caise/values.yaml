@@ -1,0 +1,32 @@
+---
+services:
+  asr-caise:
+    image:
+      name: "containers.projects.task.gda.pl/caise/spaces/pl0161-01/asr_workflow"
+      tag: "latest"
+      pullSecret: "pull-secret"
+      pullPolicy: "Always"
+    environment:
+      values:
+        MONITORING_URL: "https://clients.monitoring.apl.task.gda.pl/mimir/api/v1/push"
+        PERFTRACE: 1
+        ASR_REVISION: 2025-06-27-02
+    publish:
+      enabled: true
+      port: 80
+      targetPort: 8000
+      domain: "asr.rmp.caise.pl"
+      # domain: "asr-caise.ingress.caise.k8s.apl.task.gda.pl"
+      whitelist: "0.0.0.0/0"
+      secretName: asr-tls-secret
+    resources:
+      cpu: 2
+      memory: 4
+      gpu_type: "nvidia.com/mig-2g.24gb"
+      shmSize: "2Gi"
+    # for autoscaling parameters go to https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+    replication:
+      replicas: 1
+      minReplicas: 1
+      maxReplicas: 5
+      averageUtilization: 80

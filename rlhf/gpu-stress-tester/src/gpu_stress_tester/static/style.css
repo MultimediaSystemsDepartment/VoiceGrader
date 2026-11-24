@@ -1,0 +1,110 @@
+:root {
+  color-scheme: light;
+  --ink: #18201d;
+  --muted: #66716c;
+  --paper: #f4f2eb;
+  --panel: #fffef9;
+  --line: #d7d5cd;
+  --green: #12664f;
+  --green-bright: #22a06b;
+  --amber: #c98216;
+  --red: #a63d40;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image: linear-gradient(rgba(24, 32, 29, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(24, 32, 29, .035) 1px, transparent 1px);
+  background-size: 24px 24px;
+  font-family: "Aptos", "Segoe UI", sans-serif;
+}
+
+header, main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+
+header {
+  min-height: 150px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  padding: 42px 0 24px;
+  border-bottom: 2px solid var(--ink);
+}
+
+h1, h2, p { margin: 0; }
+h1 { max-width: 760px; font-family: Georgia, serif; font-size: clamp(2rem, 5vw, 4.5rem); font-weight: 500; line-height: .96; }
+h2 { font-family: Georgia, serif; font-size: 1.45rem; font-weight: 500; }
+.eyebrow { margin-bottom: 8px; color: var(--green); font: 700 .72rem/1.2 Consolas, monospace; letter-spacing: .13em; }
+
+.status { padding: 9px 13px; border: 1px solid var(--line); background: var(--panel); font: 700 .76rem Consolas, monospace; text-transform: uppercase; }
+.status[data-status="running"] { color: white; border-color: var(--green); background: var(--green); }
+.status[data-status="failed"], .status[data-status="interrupted"] { color: white; border-color: var(--red); background: var(--red); }
+.status[data-status="stopping"] { color: white; border-color: var(--amber); background: var(--amber); }
+
+.telemetry { display: grid; grid-template-columns: 2fr repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+.telemetry div { min-width: 0; padding: 18px 16px; border-right: 1px solid var(--line); }
+.telemetry div:first-child { padding-left: 0; }
+.telemetry div:last-child { border-right: 0; }
+.telemetry span, dt { display: block; margin-bottom: 6px; color: var(--muted); font-size: .75rem; text-transform: uppercase; }
+.telemetry strong { display: block; overflow: hidden; font: 600 .95rem Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+
+.workspace { display: grid; grid-template-columns: 1.35fr 1fr; border-bottom: 1px solid var(--line); }
+.controls, .activity { padding: 28px 28px 30px 0; }
+.activity { padding-left: 28px; border-left: 1px solid var(--line); }
+.section-heading { margin-bottom: 22px; }
+
+fieldset { display: flex; padding: 0; border: 0; }
+legend { margin-bottom: 8px; color: var(--muted); font-size: .8rem; }
+fieldset label { cursor: pointer; }
+fieldset input { position: absolute; opacity: 0; }
+fieldset span { display: block; padding: 9px 12px; border: 1px solid var(--line); border-right: 0; background: var(--panel); font-size: .85rem; }
+fieldset label:last-child span { border-right: 1px solid var(--line); }
+fieldset input:checked + span { color: white; border-color: var(--green); background: var(--green); }
+.profile-description { min-height: 20px; margin-top: 12px; color: var(--muted); font-size: .88rem; }
+
+.fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 22px 0; }
+.fields label { color: var(--muted); font-size: .8rem; }
+input[type="number"] { width: 100%; height: 38px; margin-top: 6px; padding: 0 10px; border: 1px solid var(--line); border-radius: 0; background: var(--panel); color: var(--ink); font: .9rem Consolas, monospace; }
+.profile-details { margin: -8px 0 22px; color: var(--muted); font: .78rem/1.5 Consolas, monospace; }
+
+.actions { display: flex; gap: 8px; }
+button { min-height: 40px; padding: 0 16px; border: 1px solid var(--ink); border-radius: 0; background: transparent; color: var(--ink); font-weight: 700; cursor: pointer; }
+button.primary { color: white; border-color: var(--green); background: var(--green); }
+button.danger { color: var(--red); border-color: var(--red); }
+button:disabled { cursor: not-allowed; opacity: .35; }
+#message { min-height: 20px; margin-top: 12px; color: var(--red); font-size: .85rem; }
+.notice { min-height: 20px; margin-top: 14px; color: var(--red); font-size: .85rem; line-height: 1.4; }
+
+dl { margin: 0; }
+dl div { display: grid; grid-template-columns: 100px 1fr; padding: 9px 0; border-bottom: 1px solid var(--line); }
+dd { min-width: 0; margin: 0; overflow: hidden; font: .85rem Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.progress-track { height: 8px; margin-top: 24px; background: #deddd7; }
+#progressBar { width: 0; height: 100%; background: var(--green-bright); transition: width .25s ease; }
+
+.glossary { padding: 22px 0; border-bottom: 1px solid var(--line); }
+.glossary summary { color: var(--green); font: 700 .8rem Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.glossary dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; margin-top: 18px; }
+.glossary dl div { display: grid; grid-template-columns: 150px 1fr; padding: 12px 0; }
+.glossary dt { margin: 0; color: var(--ink); font-weight: 700; }
+.glossary dd { overflow: visible; color: var(--muted); font: .86rem/1.45 "Aptos", "Segoe UI", sans-serif; text-overflow: initial; white-space: normal; }
+
+.log-panel { padding: 28px 0 40px; }
+.log-heading { display: flex; align-items: end; justify-content: space-between; }
+.follow { color: var(--muted); font-size: .8rem; }
+pre { height: min(48vh, 520px); margin: 0; padding: 18px; overflow: auto; border-left: 4px solid var(--green); background: #111815; color: #d9e8df; font: .78rem/1.6 Consolas, monospace; white-space: pre-wrap; }
+
+@media (max-width: 760px) {
+  header { align-items: start; flex-direction: column; gap: 20px; }
+  .telemetry { grid-template-columns: repeat(2, 1fr); }
+  .telemetry div:first-child { grid-column: 1 / -1; padding-left: 16px; }
+  .workspace { grid-template-columns: 1fr; }
+  .controls, .activity { padding: 24px 0; }
+  .activity { border-top: 1px solid var(--line); border-left: 0; }
+  .glossary dl { grid-template-columns: 1fr; }
+  .glossary dl div { grid-template-columns: 120px 1fr; }
+  fieldset { display: grid; grid-template-columns: repeat(2, 1fr); }
+  fieldset span, fieldset label:last-child span { border: 1px solid var(--line); }
+  .actions { align-items: stretch; flex-direction: column; }
+}

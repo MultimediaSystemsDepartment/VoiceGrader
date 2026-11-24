@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAISE-ASR — Corpus import</title>
+  <link rel="stylesheet" href="/static/style.css?v=20260802-4">
+  <script src="/static/i18n.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-brand"><div class="header-title">CAISE-ASR</div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link">Wersja polska</a>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle">{% set admin_nav_active = "corpora" %}{% include "_admin_nav.html" %}</div>
+</header>
+<main class="admin-main">
+  <section class="admin-section">
+    <h1>{{ metadata.name }}</h1>
+    <p>{{ audio_files | length }} <span class="lang-pl">nagrań</span><span class="lang-en">recordings</span> — {{ metadata.purpose }}</p>
+    <p class="info-note"><span class="lang-pl">Walidacja techniczna nie potwierdza poprawności tekstu. Odsłuchaj nagrania. Import treningowy pozostanie wyłączony; import testowy utworzy wersję roboczą WER Monitor do sprawdzenia i zablokowania.</span><span class="lang-en">Technical validation does not establish transcript accuracy. Listen to recordings. Training imports remain inactive; evaluation imports create an editable WER Monitor draft for transcript review and freezing.</span></p>
+    {% if metadata.status == 'validated' %}
+    <form method="POST" action="/admin/corpora/import/{{ stage_id }}/accept">
+      <button class="btn-trigger" type="submit"><span class="lang-pl">Zatwierdź import</span><span class="lang-en">Accept import</span></button>
+    </form>
+    <form method="POST" action="/admin/corpora/import/{{ stage_id }}/cancel">
+      <button class="btn-destructive" type="submit"><span class="lang-pl">Anuluj i usuń przesłane pliki</span><span class="lang-en">Cancel and remove uploaded files</span></button>
+    </form>
+    {% else %}<p><span class="lang-pl">Import już zatwierdzony.</span><span class="lang-en">Import already accepted.</span></p>{% endif %}
+    <a href="/admin/corpora?tab={{ metadata.purpose }}"><span class="lang-pl">Zbiory nagrań</span><span class="lang-en">Audio Corpora</span></a>
+    <table class="health-table">
+      <thead><tr><th><span class="lang-pl">Nagranie</span><span class="lang-en">Recording</span></th><th>s</th><th><span class="lang-pl">Transkrypcja</span><span class="lang-en">Transcript</span></th></tr></thead>
+      <tbody>{% for audio in audio_files %}
+        <tr><td><audio controls preload="none" src="/admin/corpora/import/{{ stage_id }}/audio/{{ loop.index0 }}"></audio><br>{{ (audio.file_path | replace('\\', '/')).split('/')[-1] }}</td><td>{{ "%.2f" | format(audio.duration_s) }}</td><td>{{ audio.reference_transcript or "—" }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>

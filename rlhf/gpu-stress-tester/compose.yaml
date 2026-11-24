@@ -1,0 +1,25 @@
+name: rlhf-gpu-training-stress-tester
+
+services:
+  tester:
+    build: .
+    image: rlhf-gpu-training-stress-tester:latest
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-8080}:8080"
+    volumes:
+      - "${ADMEDVOICE_DATA_DIR:-./data}:/data:ro"
+      - "${STRESS_OUTPUT_DIR:-./outputs}:/outputs"
+      - "${MODEL_CACHE_DIR:-./model-cache}:/models"
+    environment:
+      ADMEDVOICE_ARCHIVE: "/data/${ADMEDVOICE_ARCHIVE_NAME:-archive.zip}"
+      STRESS_OUTPUT_DIR: /outputs
+      HF_HOME: /models/huggingface
+    gpus: all
+    shm_size: "8gb"
+    restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python3.12", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5

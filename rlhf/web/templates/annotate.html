@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="pl" data-lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAISE-ASR &mdash; Adnotacja / Annotation</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/i18n.js"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-brand">
+    <div class="header-title">CAISE-ASR</div>
+    <div class="header-subtitle">
+      <span class="lang-pl">Interfejs dostrajania modelu ASR (RLHF)</span>
+      <span class="lang-en">ASR model fine-tuning interface (RLHF)</span>
+    </div>
+    <nav class="lang-switcher">
+      <a href="#" onclick="setLang('pl');return false;" id="lang-pl-link" class="lang-link lang-active">Wersja polska</a>
+      <span class="lang-sep">|</span>
+      <a href="#" onclick="setLang('en');return false;" id="lang-en-link" class="lang-link">English version</a>
+    </nav>
+  </div>
+  <div class="header-middle">
+    <span id="stats-bar" class="stats-bar"></span>
+    <span class="annotator-tag">
+      <span class="lang-pl">Adnotator:</span>
+      <span class="lang-en">Annotator:</span>
+      <strong>{{ participant_id }}</strong>
+    </span>
+  </div>
+  <div class="header-logos">
+    <img src="/static/logo-caise.svg" alt="CAISE" class="logo-caise">
+    <img src="/static/logo-admedvoice.png" alt="ADMEDVOICE" class="logo-admedvoice">
+  </div>
+</header>
+
+<main>
+
+  <!-- Loading -->
+  <div id="state-loading" class="state-panel">
+    <p>
+      <span class="lang-pl">Ładowanie kolejnej pary...</span>
+      <span class="lang-en">Loading next pair...</span>
+    </p>
+  </div>
+
+  <!-- Waiting for queue refill -->
+  <div id="state-waiting" class="state-panel" hidden>
+    <h2>
+      <span class="lang-pl">Trwa przygotowywanie par</span>
+      <span class="lang-en">Annotation pairs are being prepared</span>
+    </h2>
+    <p>
+      <span class="lang-pl">Prosimy czekać. Generowanie par do adnotacji może potrwać kilka minut. Strona odświeży się automatycznie.</span>
+      <span class="lang-en">Please wait. Generating annotation pairs may take a few minutes. This page will refresh automatically.</span>
+    </p>
+  </div>
+
+  <!-- All done -->
+  <div id="state-done" class="state-panel" hidden>
+    <h2>
+      <span class="lang-pl">Kolejka jest pusta</span>
+      <span class="lang-en">Queue is empty</span>
+    </h2>
+    <p>
+      <span class="lang-pl">Brak obecnie par do oceny. Spróbuj ponownie później lub skontaktuj się z administratorem.</span>
+      <span class="lang-en">No annotation pairs are currently available. Try again later or contact the administrator.</span>
+    </p>
+    <button class="btn-secondary" onclick="loadNextPair()">
+      <span class="lang-pl">Odśwież</span>
+      <span class="lang-en">Refresh</span>
+    </button>
+  </div>
+
+  <!-- Annotation form -->
+  <div id="state-form" hidden>
+
+    <div class="file-info" id="file-path-label"></div>
+
+    <!-- Audio player -->
+    <section class="card audio-card">
+      <div class="card-title">
+        <span class="lang-pl">Nagranie audio</span>
+        <span class="lang-en">Audio</span>
+      </div>
+      <audio id="audio-player" controls></audio>
+      <div class="audio-btns">
+        <button class="btn-ctrl" onclick="restartAudio()">
+          |&lt; <span class="lang-pl">Od początku</span><span class="lang-en">Restart</span>
+        </button>
+        <button class="btn-ctrl" onclick="forwardAudio(5)">+5 s</button>
+        <span id="audio-error" class="audio-error"></span>
+      </div>
+    </section>
+
+    <!-- Reference transcript -->
+    <section class="card ref-card" id="ref-section">
+      <div class="card-title ref-toggle" onclick="toggleRef()">
+        <span class="lang-pl">Transkrypcja referencyjna</span>
+        <span class="lang-en">Reference transcript</span>
+        <span id="ref-toggle-hint" class="ref-hint">
+          <span class="lang-pl">(kliknij, aby pokazać)</span>
+          <span class="lang-en">(click to reveal)</span>
+        </span>
+      </div>
+      <div id="ref-text" class="transcript-box ref-box" hidden></div>
+      <button class="btn-copy" id="ref-copy-btn" onclick="copyToCorrection('ref')" hidden>
+        <span class="lang-pl">Kopiuj do korekty</span><span class="lang-en">Copy to correction</span>
+      </button>
+    </section>
+
+    <!-- Hypotheses side by side -->
+    <section class="hyp-row">
+      <div class="card hyp-card" id="card-a" onclick="selectHyp('a')">
+        <div class="card-title">
+          <span class="lang-pl">Hipoteza A</span><span class="lang-en">Hypothesis A</span>
+          <span id="wer-badge-a" class="wer-badge" hidden></span>
+        </div>
+        <div id="hyp-a" class="transcript-box"></div>
+        <button class="btn-copy" onclick="event.stopPropagation(); copyToCorrection('a')">
+          <span class="lang-pl">Kopiuj do korekty</span><span class="lang-en">Copy to correction</span>
+        </button>
+      </div>
+      <div class="card hyp-card" id="card-b" onclick="selectHyp('b')">
+        <div class="card-title">
+          <span class="lang-pl">Hipoteza B</span><span class="lang-en">Hypothesis B</span>
+          <span id="wer-badge-b" class="wer-badge" hidden></span>
+        </div>
+        <div id="hyp-b" class="transcript-box"></div>
+        <button class="btn-copy" onclick="event.stopPropagation(); copyToCorrection('b')">
+          <span class="lang-pl">Kopiuj do korekty</span><span class="lang-en">Copy to correction</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Preference -->
+    <section class="card pref-card">
+      <div class="card-title">
+        <span class="lang-pl">Która transkrypcja jest lepsza?</span>
+        <span class="lang-en">Preference</span>
+      </div>
+      <div class="pref-options">
+        <label class="pref-label" id="pref-a">
+          <input type="radio" name="pref" value="a">
+          &lt; <span class="lang-pl">A jest lepsza</span><span class="lang-en">A is better</span>
+        </label>
+        <label class="pref-label pref-equal" id="pref-eq">
+          <input type="radio" name="pref" value="equal" checked>
+          <span class="lang-pl">Brak różnicy / obie błędne</span><span class="lang-en">Equal / both wrong</span>
+        </label>
+        <label class="pref-label" id="pref-b">
+          <input type="radio" name="pref" value="b">
+          <span class="lang-pl">B jest lepsza</span><span class="lang-en">B is better</span> &gt;
+        </label>
+      </div>
+    </section>
+
+    <!-- Correction -->
+    <section class="card correction-card">
+      <div class="card-title">
+        <span class="lang-pl">Poprawna transkrypcja</span><span class="lang-en">Corrected transcript</span>
+        <span class="optional">
+          (<span class="lang-pl">opcjonalnie &mdash; używana w treningu SFT</span><span class="lang-en">optional &mdash; drives SFT training</span>)
+        </span>
+      </div>
+      <textarea id="correction-text" rows="3"
+                placeholder="..."></textarea>
+    </section>
+
+    <!-- Action bar -->
+    <div class="action-bar">
+      <button class="btn-skip" onclick="skipPair()">
+        <span class="lang-pl">Pomiń</span>
+        <span class="lang-en">Skip</span>
+      </button>
+      <button class="btn-exclude" onclick="excludePair()">
+        [X] <span class="lang-pl">Wyklucz nagranie</span><span class="lang-en">Exclude recording</span>
+      </button>
+      <button class="btn-submit" onclick="submitPair()">
+        <span class="lang-pl">Zapisz i przejdź dalej</span><span class="lang-en">Submit</span> &rarr;
+      </button>
+    </div>
+
+  </div><!-- /state-form -->
+</main>
+
+<script>
+"use strict";
+
+// Feature flags set server-side by admin
+const SHOW_REFERENCE = {{ 'true' if show_reference else 'false' }};
+const SHOW_WER       = {{ 'true' if show_wer else 'false' }};
+
+let currentPair = null;
+let pairRetryTimer = null;
+const audioEl = document.getElementById("audio-player");
+
+// ---------------------------------------------------------------------------
+// State transitions
+// ---------------------------------------------------------------------------
+
+function showState(name) {
+  ["loading", "waiting", "done", "form"].forEach(s => {
+    document.getElementById("state-" + s).hidden = (s !== name);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Load next pair
+// ---------------------------------------------------------------------------
+
+async function loadNextPair(showLoading = true) {
+  if (pairRetryTimer !== null) {
+    clearTimeout(pairRetryTimer);
+    pairRetryTimer = null;
+  }
+  if (showLoading) showState("loading");
+  currentPair = null;
+
+  let data;
+  try {
+    const resp = await fetch("/api/pair");
+    if (!resp.ok) {
+      if (resp.status === 401) { window.location = "/setup"; return; }
+      throw new Error("HTTP " + resp.status);
+    }
+    data = await resp.json();
+  } catch (e) {
+    alert(t('error.loadPair') + ": " + e.message);
+    showState("done");
+    return;
+  }
+
+  if (data.done) {
+    if (["queued", "running"].includes(data.queue_refill_status)) {
+      showState("waiting");
+      pairRetryTimer = setTimeout(() => loadNextPair(false), 10000);
+    } else {
+      showState("done");
+    }
+    return;
+  }
+
+  currentPair = data;
+
+  // Populate UI
+  document.getElementById("file-path-label").textContent = data.file_path || "";
+  document.getElementById("ref-text").textContent   = data.reference || t('ref.none');
+  // Apply admin visibility flags
+  const refSection = document.getElementById("ref-section");
+  if (refSection) refSection.hidden = !SHOW_REFERENCE;
+  // Reset ref to hidden for each new pair
+  document.getElementById("ref-text").hidden = true;
+  document.getElementById("ref-copy-btn").hidden = true;
+  document.getElementById("ref-toggle-hint").innerHTML =
+    '<span class="lang-pl">(kliknij, aby pokazać)</span><span class="lang-en">(click to reveal)</span>';
+  document.getElementById("hyp-a").textContent      = data.hyp_a;
+  document.getElementById("hyp-b").textContent      = data.hyp_b;
+  document.getElementById("wer-badge-a").hidden = true;
+  document.getElementById("wer-badge-b").hidden = true;
+  document.getElementById("correction-text").value  = "";
+  document.getElementById("audio-error").textContent = "";
+
+  // Reset preference to "equal"
+  const eqRadio = document.querySelector('input[name="pref"][value="equal"]');
+  if (eqRadio) eqRadio.checked = true;
+  updatePrefHighlight();
+
+  // Load and play audio
+  audioEl.src = "/audio/" + data.pair_id;
+  audioEl.load();
+  audioEl.play().catch(() => {}); // autoplay may be blocked by browser
+
+  showState("form");
+  refreshStats();
+}
+
+// ---------------------------------------------------------------------------
+// Audio controls
+// ---------------------------------------------------------------------------
+
+function restartAudio() { audioEl.currentTime = 0; audioEl.play(); }
+function forwardAudio(s) { audioEl.currentTime = Math.min(audioEl.duration || 0, audioEl.currentTime + s); }
+
+audioEl.addEventListener("error", () => {
+  document.getElementById("audio-error").textContent = t('error.audio');
+});
+
+// ---------------------------------------------------------------------------
+// Preference highlight
+// ---------------------------------------------------------------------------
+
+function toggleRef() {
+  const box  = document.getElementById("ref-text");
+  const btn  = document.getElementById("ref-copy-btn");
+  const hint = document.getElementById("ref-toggle-hint");
+  const show = box.hidden;
+  box.hidden = !show;
+  btn.hidden = !show;
+  hint.innerHTML = show
+    ? '<span class="lang-pl">(kliknij, aby ukryć)</span><span class="lang-en">(click to hide)</span>'
+    : '<span class="lang-pl">(kliknij, aby pokazać)</span><span class="lang-en">(click to reveal)</span>';
+}
+
+function updatePrefHighlight() {
+  const val = getPreference();
+  ["a", "b"].forEach(side => {
+    document.getElementById("card-" + side).classList.toggle("selected", val === side);
+  });
+}
+
+function selectHyp(side) {
+  const radio = document.querySelector('input[name="pref"][value="' + side + '"]');
+  if (radio) { radio.checked = true; updatePrefHighlight(); }
+}
+
+document.addEventListener("change", e => {
+  if (e.target.name === "pref") updatePrefHighlight();
+});
+
+function getPreference() {
+  const r = document.querySelector('input[name="pref"]:checked');
+  return r ? r.value : "equal";
+}
+
+// ---------------------------------------------------------------------------
+// Copy to correction
+// ---------------------------------------------------------------------------
+
+function copyToCorrection(source) {
+  const texts = {
+    ref: document.getElementById("ref-text").textContent,
+    a:   document.getElementById("hyp-a").textContent,
+    b:   document.getElementById("hyp-b").textContent,
+  };
+  const ta = document.getElementById("correction-text");
+  ta.value = texts[source] || "";
+  ta.focus();
+}
+
+// ---------------------------------------------------------------------------
+// Submit / Skip / Exclude
+// ---------------------------------------------------------------------------
+
+async function submitPair() {
+  if (!currentPair) return;
+  const correction = document.getElementById("correction-text").value.trim();
+  const pref = getPreference();
+
+  const body = new FormData();
+  body.append("pair_id",         currentPair.pair_id);
+  body.append("preference",      pref);
+  body.append("correction_text", correction);
+  body.append("strength",        "5");
+
+  const resp = await fetch("/api/submit", { method: "POST", body });
+  const data = await resp.json();
+  if (data.ok) {
+    if (data.stats) updateStatsBar(data.stats);
+    loadNextPair();
+  } else {
+    alert(t('error.submit') + ": " + JSON.stringify(data));
+  }
+}
+
+async function skipPair() {
+  if (!currentPair) return;
+  const body = new FormData();
+  body.append("pair_id", currentPair.pair_id);
+  await fetch("/api/skip", { method: "POST", body });
+  loadNextPair();
+}
+
+async function excludePair() {
+  if (!currentPair) return;
+  const reason = prompt(t('exclude.prompt'), t('exclude.default'));
+  if (reason === null) return; // user cancelled the prompt
+  const body = new FormData();
+  body.append("audio_id", currentPair.audio_id);
+  body.append("reason",   reason.trim() || t('exclude.default'));
+  await fetch("/api/exclude", { method: "POST", body });
+  loadNextPair();
+}
+
+// ---------------------------------------------------------------------------
+// Stats bar
+// ---------------------------------------------------------------------------
+
+async function refreshStats() {
+  try {
+    const resp = await fetch("/api/stats");
+    const data = await resp.json();
+    updateStatsBar(data);
+  } catch (_) {}
+}
+
+function updateStatsBar(stats) {
+  const bar = document.getElementById("stats-bar");
+  bar.textContent = [
+    t('stats.pending')   + ": " + (stats.pending_pairs   ?? "?"),
+    t('stats.annotated') + ": " + (stats.annotated_pairs ?? "?"),
+    t('stats.skipped')   + ": " + (stats.skipped_pairs   ?? "?"),
+    t('stats.audio')     + ": " + (stats.audio_files     ?? "?"),
+  ].join("  |  ");
+}
+
+// ---------------------------------------------------------------------------
+// Heartbeat -- keeps the active-session entry alive in the DB
+// ---------------------------------------------------------------------------
+async function sendHeartbeat() {
+  try {
+    await fetch("/api/heartbeat", { method: "POST" });
+  } catch (_) {}
+}
+// Send immediately on load, then every 60 seconds.
+sendHeartbeat();
+setInterval(sendHeartbeat, 60000);
+
+// ---------------------------------------------------------------------------
+// WER (live, computed in browser)
+// ---------------------------------------------------------------------------
+
+function _wer(reference, hypothesis) {
+  const ref = reference.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hyp = hypothesis.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (ref.length === 0) return null;
+  // Levenshtein on word arrays
+  const R = ref.length, H = hyp.length;
+  const dp = Array.from({length: R + 1}, (_, i) => Array.from({length: H + 1}, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+  for (let i = 1; i <= R; i++)
+    for (let j = 1; j <= H; j++)
+      dp[i][j] = ref[i-1] === hyp[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[R][H] / R;
+}
+
+function updateWerBadges() {
+  if (!SHOW_WER) return;  // disabled by admin
+  const correction = document.getElementById("correction-text").value.trim();
+  const hypA = document.getElementById("hyp-a").textContent.trim();
+  const hypB = document.getElementById("hyp-b").textContent.trim();
+  const badgeA = document.getElementById("wer-badge-a");
+  const badgeB = document.getElementById("wer-badge-b");
+
+  if (!correction || !hypA || !hypB) {
+    badgeA.hidden = true;
+    badgeB.hidden = true;
+    return;
+  }
+
+  const werA = _wer(correction, hypA);
+  const werB = _wer(correction, hypB);
+  if (werA === null || werB === null) return;
+
+  badgeA.textContent = "WER " + Math.round(werA * 100) + "%";
+  badgeB.textContent = "WER " + Math.round(werB * 100) + "%";
+  badgeA.hidden = false;
+  badgeB.hidden = false;
+
+  // Highlight the better badge
+  badgeA.classList.toggle("wer-better", werA < werB);
+  badgeB.classList.toggle("wer-better", werB < werA);
+  badgeA.classList.toggle("wer-worse",  werA > werB);
+  badgeB.classList.toggle("wer-worse",  werB > werA);
+}
+
+document.getElementById("correction-text").addEventListener("input", updateWerBadges);
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+loadNextPair();
+</script>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <p class="footer-copy">
+      <span class="lang-pl">© 2026 Katedra Systemów Multimedialnych, Politechnika Gdańska, Wydział Elektroniki, Telekomunikacji i Informatyki.</span>
+      <span class="lang-en">© 2026 Department of Multimedia Systems, Gdańsk University of Technology, Faculty of Electronics, Telecommunication and Informatics.</span>
+    </p>
+    <p class="footer-disclaimer">
+      <span class="lang-pl">Autorzy usługi nie ponoszą odpowiedzialności za generowane przez nią treści, ani za konsekwencje dalszego ich wykorzystania.</span>
+      <span class="lang-en">The creators of the service bear no responsibility for the content it generates or for the consequences of its further use.</span>
+    </p>
+    <p class="footer-projects-title">
+      <span class="lang-pl">Usługa zrealizowana w ramach poniższych projektów.</span>
+      <span class="lang-en">Service created within the following projects.</span>
+    </p>
+    <p class="footer-project">
+      <a href="https://caise.pl/" target="_blank" rel="noopener">CAISE</a>
+      <span class="lang-pl"> (Cloud Artificial Intelligence Service Engineering) - Chmurowa Platforma do wytwarzania uniwersalnych usług inteligentnych dla różnych obszarów zastosowań. Instytucja wdrażająca: Narodowe Centrum Badań i Rozwoju (NCBR). Program finansujący: KPO IPCEI CIS C 3.1.1 Important Project of Common European Interest. Nr projektu: KPOD.05.10-IW.10-0005/24.</span>
+      <span class="lang-en"> (Cloud Artificial Intelligence Service Engineering) - Cloud platform for creating universal intelligent services for various application areas. Implementing Institution: National Centre for Research and Development (NCBR). Financing Program: KPO IPCEI CIS C 3.1.1 Important Project of Common European Interest. Project No.: KPOD.05.10-IW.10-0005/24.</span>
+    </p>
+    <p class="footer-project">
+      <a href="https://multimed.org/admedvoice" target="_blank" rel="noopener">ADMEDVOICE</a>
+      <span class="lang-pl"> - Adaptacyjny system inteligentnego przetwarzania mowy lekarzy wraz ze strukturalizacją wyników badań i wspomaganiem procesu terapeutycznego. Projekt współfinansowany przez Narodowe Centrum Badań i Rozwoju w ramach programu Infostrateg IV, nr projektu: INFOSTRATEG-IV/0003/2022.</span>
+      <span class="lang-en"> - Adaptive intelligent speech processing system of medical personnel with the structuring of test results and support of therapeutic process. The project was co-financed by the National Centre for Research and Development under the Infostrateg IV program, project number: INFOSTRATEG-IV/0003/2022.</span>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

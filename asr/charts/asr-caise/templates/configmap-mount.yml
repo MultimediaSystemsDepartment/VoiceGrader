@@ -1,0 +1,13 @@
+{{- range $name, $service := .Values.services }}
+{{- range $config := $service.configurationFiles }}
+---
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: {{ $name }}-{{ regexReplaceAll "\\..*$" (base $config.path) "" }}
+type: "Opaque"
+data:
+  {{ base $config.path }}: |
+{{- $config.content | nindent 4 }}
+{{- end }}
+{{- end }}

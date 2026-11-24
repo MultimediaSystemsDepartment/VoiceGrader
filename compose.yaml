@@ -1,0 +1,175 @@
+name: voicegrader
+
+x-rlhf-volumes: &rlhf-volumes
+  - ./_data/rlhf:/app/_data
+  - rlhf_outputs:/app/_outputs
+  - ./rlhf/default_paths.json:/app/default_paths.json
+  - rlhf_model_cache:/root/.cache/huggingface
+  - bridge_auth:/run/voicegrader-bridge
+
+services:
+  rlhf:
+    image: voicegrader-rlhf:dev
+    build:
+      context: ./rlhf
+      dockerfile: Dockerfile.web
+    ports:
+      - "127.0.0.1:${RLHF_PORT:-8080}:8080"
+    environment:
+      INLINE_COORDINATOR: "0"
+      TTS_BASE_URL: "${TTS_BASE_URL:-http://tts-api:8080}"
+      TTS_LOCAL_URL: "http://tts-api:8080"
+      VOICEGRADER_ASR_URL: "${VOICEGRADER_ASR_URL:-http://asr:8000}"
+      VOICEGRADER_BRIDGE_TOKEN_FILE: /run/voicegrader-bridge/token
+      VOICEGRADER_BRIDGE_TOKEN_UID: "1100"
+    volumes: *rlhf-volumes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  training:
+    image: voicegrader-training:dev
+    build:
+      context: ./rlhf
+      dockerfile: ../training/Dockerfile
+    profiles: ["training"]
+    command: ["python3.12", "scripts/coordinator.py"]
+    depends_on:
+      rlhf:
+        condition: service_healthy
+    environment:
+      COORDINATOR_POLL_INTERVAL: "${COORDINATOR_POLL_INTERVAL:-30}"
+      EVAL_MAX_SAMPLES: "${EVAL_MAX_SAMPLES:-40}"
+      DIAGNOSTICS_WEB_URL: "http://rlhf:8080/api/stats"
+      VOICEGRADER_BRIDGE_TOKEN_FILE: /run/voicegrader-bridge/token
+      VOICEGRADER_BRIDGE_TOKEN_UID: "1100"
+      TTS_BASE_URL: "${TTS_BASE_URL:-http://tts-api:8080}"
+      TTS_LOCAL_URL: "http://tts-api:8080"
+    volumes: *rlhf-volumes
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  tts-piper:
+    image: voicegrader-tts-piper:dev
+    build:
+      context: ./tts/engines/piper
+    volumes:
+      - ./_data/tts/models/piper:/models/piper:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; assert json.load(urllib.request.urlopen('http://localhost:8100/health', timeout=3))['assets_ready']"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  tts-api:
+    image: voicegrader-tts-api:dev
+    build:
+      context: ./tts/orchestration/rest
+      dockerfile: Dockerfile.standalone
+    environment:
+      RLHF_POC_DATA: /state
+      RLHF_PIPER_URL: http://tts-piper:8100
+      RLHF_XTTS_URL: http://tts-xtts:8100
+      RLHF_CHATTERBOX_URL: http://tts-chatterbox:8100
+      RLHF_OMNIVOICE_URL: http://tts-omnivoice:8000
+      VOICEGRADER_BRIDGE_TOKEN_FILE: /run/voicegrader-bridge/token
+    volumes:
+      - tts_state:/state
+      - bridge_auth:/run/voicegrader-bridge:ro
+    depends_on:
+      rlhf:
+        condition: service_healthy
+      tts-piper:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  tts-xtts:
+    image: voicegrader-tts-xtts:dev
+    build:
+      context: ./tts/engines/xtts
+    profiles: ["tts-xtts"]
+    gpus: all
+    environment:
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      COQUI_TOS_AGREED: "${COQUI_TOS_AGREED:-0}"
+    volumes:
+      - ./_data/tts/models/xtts_v2:/models/xtts_v2:ro
+      - ./_data/tts/reference_voices:/voices:ro
+
+  tts-chatterbox:
+    image: voicegrader-tts-chatterbox:dev
+    build:
+      context: ./tts/engines/chatterbox
+    profiles: ["tts-chatterbox"]
+    gpus: all
+    environment:
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - ./_data/tts/hf:/hf:ro
+      - ./_data/tts/reference_voices:/voices:ro
+
+  tts-omnivoice:
+    image: voicegrader-tts-omnivoice:dev
+    build:
+      context: ./tts/engines/omnivoice
+    profiles: ["tts-omnivoice"]
+    gpus: all
+    environment:
+      HF_HUB_OFFLINE: "1"
+      OMNIVOICE_REF_TEXT_FILE: /voices/Arek.txt
+    volumes:
+      - ./_data/tts/hf:/models/hf:ro
+      - ./_data/tts/reference_voices:/voices:ro
+
+  asr:
+    image: voicegrader-asr:dev
+    build:
+      context: ./asr
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${ASR_PORT:-8000}:8000"
+    volumes:
+      - asr_models:/app/data/models
+      - asr_cache:/app/.cache
+      - bridge_auth:/run/voicegrader-bridge:ro
+    environment:
+      VOICEGRADER_RLHF_URL: "${VOICEGRADER_RLHF_URL:-http://rlhf:8080}"
+      VOICEGRADER_HOT_RELOAD: "${VOICEGRADER_HOT_RELOAD:-1}"
+      VOICEGRADER_BRIDGE_TOKEN_FILE: /run/voicegrader-bridge/token
+    depends_on:
+      rlhf:
+        condition: service_healthy
+    shm_size: "2gb"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  rlhf_outputs:
+  rlhf_model_cache:
+  bridge_auth:
+  asr_models:
+  asr_cache:
+  tts_state:

@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: asr-caise
+spec:
+  destination:
+    namespace: caise-pl0161-01-spaces
+    server: https://kubernetes.default.svc
+  # source:
+  #   path: charts/k8s_deployment
+  #   repoURL: https://projects.task.gda.pl/caise/spaces/pl0161-01/asr_workflow.git
+  #   targetRevision: HEAD
+  #   helm:
+  #     valueFiles:
+  #       - values.yaml
+  source:
+    repoURL: https://projects.task.gda.pl/api/v4/projects/2449/packages/helm/stable
+    chart: asr-caise
+    targetRevision: 1.0.*
+  sources: []
+  project: caise-pl0161-01
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false
+      enabled: true
+    syncOptions:
+      - ApplyOutOfSyncOnly=true
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+      - ServerSideApply=true

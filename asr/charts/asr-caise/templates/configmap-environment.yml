@@ -1,0 +1,11 @@
+{{- range $name, $service := .Values.services }}
+---
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "{{ $name }}-configuration"
+data:
+{{- range $key, $value := $service.environment.values }}
+  {{ $key }}: "{{ $value }}"
+{{- end }}
+{{- end }}
